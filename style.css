@@ -9,6 +9,10 @@
   --accent: #c9a876;
   --accent-dim: rgba(201, 168, 118, 0.14);
   --danger: #d97b7b;
+  --good: #7fbf7f;
+  --good-dim: rgba(127, 191, 127, 0.16);
+  --warn: #d9c36c;
+  --warn-dim: rgba(217, 195, 108, 0.16);
   --radius: 14px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
@@ -26,7 +30,7 @@ html, body{
   overscroll-behavior-y: none;
 }
 
-button, input{ font-family: inherit; }
+button, input, textarea{ font-family: inherit; }
 
 ::selection{ background: var(--accent-dim); color: var(--text); }
 
@@ -137,6 +141,7 @@ button, input{ font-family: inherit; }
   padding: 4px 6px;
   cursor: pointer;
   border-radius: 8px;
+  flex-shrink: 0;
 }
 .item-remove:active{ background: var(--surface-2); }
 
@@ -153,6 +158,8 @@ button, input{ font-family: inherit; }
   justify-content: center;
   cursor: pointer;
   padding: 0;
+  align-self: flex-start;
+  margin-top: 1px;
 }
 .check svg{
   width: 13px;
@@ -175,7 +182,7 @@ button, input{ font-family: inherit; }
   text-decoration-color: var(--border);
 }
 
-/* --- Goal "completed" pill --- */
+/* --- Goal / done pill (reused by future items) --- */
 .goal-btn{
   flex-shrink: 0;
   border: 1px solid var(--border);
@@ -188,20 +195,6 @@ button, input{ font-family: inherit; }
   border-radius: 20px;
   cursor: pointer;
   white-space: nowrap;
-}
-.list-item.is-complete{
-  background: var(--accent-dim);
-  border-color: transparent;
-}
-.list-item.is-complete .item-text{
-  color: var(--text-dim);
-  text-decoration: line-through;
-  text-decoration-color: var(--text-dim);
-}
-.list-item.is-complete .goal-btn{
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #16130c;
 }
 
 /* --- Routine row (navigates) --- */
@@ -264,6 +257,115 @@ button, input{ font-family: inherit; }
 }
 .add-btn:active{ opacity: 0.85; }
 
+/* ============ To-Do ============ */
+.todo-item{
+  align-items: flex-start;
+}
+
+.todo-body{
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.todo-desc{
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.todo-due{
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.todo-due.is-overdue{ color: var(--danger); }
+
+.todo-actions{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.archive-btn{
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.list-item.is-done .todo-desc,
+.list-item.is-done .todo-due{
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
+.todo-form{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.todo-form input[type="text"],
+.todo-form textarea{
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: var(--text);
+  font-size: 14.5px;
+  resize: none;
+  width: 100%;
+}
+
+.todo-form input::placeholder,
+.todo-form textarea::placeholder{ color: var(--text-dim); }
+
+.todo-form input:focus,
+.todo-form textarea:focus{
+  outline: none;
+  border-color: var(--accent);
+}
+
+.todo-form-row{
+  display: flex;
+  gap: 8px;
+}
+
+.todo-form-row input[type="date"]{
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13.5px;
+  color-scheme: dark;
+  min-width: 0;
+}
+.todo-form-row input[type="date"]:focus{
+  outline: none;
+  border-color: var(--accent);
+}
+.todo-form-row .add-btn{ width: 46px; }
+
 /* ============ Routine detail ============ */
 .back-btn{
   background: none;
@@ -293,6 +395,107 @@ button, input{ font-family: inherit; }
   cursor: pointer;
 }
 
+/* ============ Calendar ============ */
+.cal-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.cal-month-label{
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.cal-nav{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 17px;
+  cursor: pointer;
+  line-height: 1;
+}
+.cal-nav:active{ background: var(--surface-2); }
+
+.cal-weekdays{
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 6px;
+}
+.cal-weekdays span{
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.cal-grid{
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.cal-cell{
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: default;
+  position: relative;
+}
+
+.cal-cell.is-empty{ visibility: hidden; }
+
+.cal-cell.is-today{
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.cal-cell.is-clickable{ cursor: pointer; }
+.cal-cell.is-clickable:active{ background: var(--surface-2); }
+
+.cal-cell .dot{
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.dot-good{ background: var(--good) !important; }
+.dot-partial{ background: var(--warn) !important; }
+.dot-none{ background: var(--text-dim) !important; }
+
+.cal-legend{
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+.cal-legend span{ display: flex; align-items: center; gap: 6px; }
+.cal-legend .dot{ width: 7px; height: 7px; border-radius: 50%; }
+
+.cal-detail{
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+  min-height: 18px;
+}
+
 /* ============ Tab bar ============ */
 .tabbar{
   flex-shrink: 0;
@@ -316,21 +519,21 @@ button, input{ font-family: inherit; }
 }
 
 .tab-icon{
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
   fill: currentColor;
 }
 
 .tab-btn span{
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .tab-btn.is-active{ color: var(--accent); }
 
 /* ============ Focus visibility ============ */
-button:focus-visible, input:focus-visible{
+button:focus-visible, input:focus-visible, textarea:focus-visible{
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

@@ -3,10 +3,11 @@
 
   /* ============ Storage helpers ============ */
   const STORE = {
-    habits: 'enfoque.habits',        // [{id, name}]
-    habitLog: 'enfoque.habitLog',    // { "2026-07-12": [habitId, ...] }
-    routines: 'enfoque.routines',    // [{id, name, exercises:[{id,name}]}]
-    goals: 'enfoque.goals'           // [{id, name, done}]
+    habits: 'enfoque.habits',            // [{id, name}]
+    habitLog: 'enfoque.habitLog',        // { "2026-07-12": [habitId, ...] }
+    habitHistory: 'enfoque.habitHistory',// { "2026-07-12": {completed, total} }
+    routines: 'enfoque.routines',        // [{id, name, exercises:[{id,name}]}]
+    todos: 'enfoque.todos'               // [{id,title,description,dueDate,done,archived}]
   };
 
   function load(key, fallback) {
@@ -32,20 +33,28 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  function todayKey() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function dateKey(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
+
+  function todayKey() { return dateKey(new Date()); }
 
   const CHECK_ICON = '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
 
   /* ============ State ============ */
   let habits = load(STORE.habits, []);
   let habitLog = load(STORE.habitLog, {});
+  let habitHistory = load(STORE.habitHistory, {});
   let routines = load(STORE.routines, []);
-  let goals = load(STORE.goals, []);
+  let todos = load(STORE.todos, []);
+
   let activeRoutineId = null;
   let currentTab = 'habits';
+  let currentDayKey = todayKey();
+  let calDate = new Date();
+  calDate.setDate(1);
 
   /* ============ DOM refs ============ */
   const $ = (id) => document.getElementById(id);
@@ -54,12 +63,19 @@
   const todayLabel = $('today-label');
   const progressCount = $('progress-count');
   const progressFill = $('progress-fill');
-  const progressTrack = document.querySelector('.progress-track');
+  const progressTrack = $('progress-track');
 
   const habitsList = $('habits-list');
   const habitsEmpty = $('habits-empty');
   const habitForm = $('habit-form');
   const habitInput = $('habit-input');
+
+  const todosList = $('todos-list');
+  const todosEmpty = $('todos-empty');
+  const todoForm = $('todo-form');
+  const todoTitle = $('todo-title');
+  const todoDesc = $('todo-desc');
+  const todoDue = $('todo-due');
 
   const routinesIndex = $('routines-index');
   const routinesList = $('routines-list');
@@ -76,41 +92,39 @@
   const exerciseInput = $('exercise-input');
   const routineDeleteBtn = $('routine-delete');
 
-  const goalsList = $('goals-list');
-  const goalsEmpty = $('goals-empty');
-  const goalForm = $('goal-form');
-  const goalInput = $('goal-input');
+  const calPrev = $('cal-prev');
+  const calNext = $('cal-next');
+  const calMonthLabel = $('cal-month-label');
+  const calGrid = $('cal-grid');
+  const calDetail = $('cal-detail');
 
   const tabbar = $('tabbar');
 
   /* ============ Tab switching ============ */
   const TAB_META = {
-    habits: 'Hábitos',
-    routines: 'Rutinas',
-    goals: 'Metas'
+    habits: { title: 'Hábitos', eyebrow: 'Hoy' },
+    todos: { title: 'To-Do', eyebrow: 'Pendientes' },
+    routines: { title: 'Rutinas', eyebrow: 'Entrenamiento' },
+    calendar: { title: 'Progreso', eyebrow: 'Historial' }
   };
 
   function showTab(tab) {
     currentTab = tab;
 
     document.querySelectorAll('[data-view]').forEach(v => v.hidden = true);
-    $(`view-${tab === 'habits' ? 'habits' : tab === 'routines' ? 'routines' : 'goals'}`).hidden = false;
+    $(`view-${tab}`).hidden = false;
 
     document.querySelectorAll('.tab-btn').forEach(b => {
       b.classList.toggle('is-active', b.dataset.tab === tab);
     });
 
-    pageTitle.textContent = TAB_META[tab];
+    const meta = TAB_META[tab];
+    pageTitle.textContent = meta.title;
+    todayLabel.textContent = meta.eyebrow;
 
-    if (tab === 'habits') {
-      todayLabel.textContent = 'Hoy';
-      progressTrack.style.visibility = 'visible';
-      progressCount.style.visibility = 'visible';
-    } else {
-      todayLabel.textContent = tab === 'routines' ? 'Entrenamiento' : 'Objetivos';
-      progressTrack.style.visibility = 'hidden';
-      progressCount.style.visibility = 'hidden';
-    }
+    const showProgress = tab === 'habits';
+    progressTrack.style.visibility = showProgress ? 'visible' : 'hidden';
+    progressCount.style.visibility = showProgress ? 'visible' : 'hidden';
 
     if (tab === 'routines') {
       activeRoutineId = null;
@@ -128,6 +142,12 @@
   });
 
   /* ============ Habits ============ */
+  function recordHabitHistory() {
+    const log = habitLog[todayKey()] || [];
+    habitHistory[todayKey()] = { completed: log.length, total: habits.length };
+    save(STORE.habitHistory, habitHistory);
+  }
+
   function renderHabits() {
     const log = habitLog[todayKey()] || [];
     habitsList.innerHTML = '';
@@ -166,12 +186,14 @@
     if (idx === -1) log.push(id); else log.splice(idx, 1);
     habitLog[key] = log;
     save(STORE.habitLog, habitLog);
+    recordHabitHistory();
     renderHabits();
   }
 
   function removeHabit(id) {
     habits = habits.filter(h => h.id !== id);
     save(STORE.habits, habits);
+    recordHabitHistory();
     renderHabits();
   }
 
@@ -182,7 +204,112 @@
     habits.push({ id: uid(), name });
     save(STORE.habits, habits);
     habitInput.value = '';
+    recordHabitHistory();
     renderHabits();
+  });
+
+  /* --- Day rollover watcher: keeps checkboxes fresh across midnight without reload --- */
+  setInterval(() => {
+    const nowKey = todayKey();
+    if (nowKey !== currentDayKey) {
+      currentDayKey = nowKey;
+      if (currentTab === 'habits') renderHabits();
+    }
+  }, 30000);
+
+  /* ============ To-Do ============ */
+  function formatDue(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  }
+
+  function renderTodos() {
+    todosList.innerHTML = '';
+    const visible = todos.filter(t => !t.archived);
+    todosEmpty.hidden = visible.length > 0;
+
+    const sorted = visible.slice().sort((a, b) => {
+      if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    });
+
+    sorted.forEach(t => {
+      const li = document.createElement('li');
+      li.className = 'list-item todo-item' + (t.done ? ' is-done' : '');
+
+      const overdue = !t.done && t.dueDate && t.dueDate < todayKey();
+
+      li.innerHTML = `
+        <button class="check" aria-label="Marcar tarea">${CHECK_ICON}</button>
+        <div class="todo-body">
+          <span class="item-text"></span>
+          ${t.description ? '<p class="todo-desc"></p>' : ''}
+          ${t.dueDate ? `<span class="todo-due${overdue ? ' is-overdue' : ''}"></span>` : ''}
+        </div>
+        <div class="todo-actions">
+          ${t.done ? '<button class="archive-btn">Archivar</button>' : ''}
+          <button class="item-remove" aria-label="Eliminar tarea">×</button>
+        </div>
+      `;
+
+      li.querySelector('.item-text').textContent = t.title;
+      if (t.description) li.querySelector('.todo-desc').textContent = t.description;
+      if (t.dueDate) {
+        li.querySelector('.todo-due').textContent = (overdue ? 'Venció ' : 'Vence ') + formatDue(t.dueDate);
+      }
+
+      li.querySelector('.check').addEventListener('click', () => toggleTodo(t.id));
+      li.querySelector('.item-remove').addEventListener('click', () => removeTodo(t.id));
+      const archiveBtn = li.querySelector('.archive-btn');
+      if (archiveBtn) archiveBtn.addEventListener('click', () => archiveTodo(t.id));
+
+      todosList.appendChild(li);
+    });
+  }
+
+  function toggleTodo(id) {
+    const t = todos.find(x => x.id === id);
+    if (!t) return;
+    t.done = !t.done;
+    save(STORE.todos, todos);
+    renderTodos();
+  }
+
+  function archiveTodo(id) {
+    const t = todos.find(x => x.id === id);
+    if (!t) return;
+    t.archived = true;
+    save(STORE.todos, todos);
+    renderTodos();
+  }
+
+  function removeTodo(id) {
+    todos = todos.filter(t => t.id !== id);
+    save(STORE.todos, todos);
+    renderTodos();
+  }
+
+  todoForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const title = todoTitle.value.trim();
+    if (!title) return;
+    todos.push({
+      id: uid(),
+      title,
+      description: todoDesc.value.trim(),
+      dueDate: todoDue.value || null,
+      done: false,
+      archived: false
+    });
+    save(STORE.todos, todos);
+    todoTitle.value = '';
+    todoDesc.value = '';
+    todoDue.value = '';
+    renderTodos();
   });
 
   /* ============ Routines ============ */
@@ -280,60 +407,84 @@
     backToRoutines();
   });
 
-  /* ============ Goals ============ */
-  function renderGoals() {
-    goalsList.innerHTML = '';
-    goalsEmpty.hidden = goals.length > 0;
+  /* ============ Calendar ============ */
+  function renderCalendar() {
+    const year = calDate.getFullYear();
+    const month = calDate.getMonth();
 
-    goals.forEach(g => {
-      const li = document.createElement('li');
-      li.className = 'list-item' + (g.done ? ' is-complete' : '');
-      li.innerHTML = `
-        <span class="item-text"></span>
-        <button class="goal-btn"></button>
-        <button class="item-remove" aria-label="Eliminar meta">×</button>
+    const label = calDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    calMonthLabel.textContent = label;
+
+    const firstDay = new Date(year, month, 1);
+    const leading = (firstDay.getDay() + 6) % 7; // Monday-first offset
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    calGrid.innerHTML = '';
+    calDetail.textContent = '';
+
+    for (let i = 0; i < leading; i++) {
+      const spacer = document.createElement('div');
+      spacer.className = 'cal-cell is-empty';
+      calGrid.appendChild(spacer);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const key = `${year}-${pad(month + 1)}-${pad(day)}`;
+      const entry = habitHistory[key];
+      const isToday = key === todayKey();
+
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell' + (isToday ? ' is-today' : '') + (entry ? ' is-clickable' : '');
+
+      let dotClass = null;
+      if (entry && entry.total > 0) {
+        dotClass = entry.completed >= entry.total ? 'dot-good' : (entry.completed > 0 ? 'dot-partial' : 'dot-none');
+      } else if (entry && entry.total === 0) {
+        dotClass = null;
+      }
+
+      cell.innerHTML = `
+        <span class="cal-day-num"></span>
+        <span class="dot${dotClass ? ' ' + dotClass : ''}" style="${dotClass ? '' : 'visibility:hidden'}"></span>
       `;
-      li.querySelector('.item-text').textContent = g.name;
-      li.querySelector('.goal-btn').textContent = g.done ? 'Cumplida' : 'Marcar';
-      li.querySelector('.goal-btn').addEventListener('click', () => toggleGoal(g.id));
-      li.querySelector('.item-remove').addEventListener('click', () => removeGoal(g.id));
-      goalsList.appendChild(li);
-    });
+      cell.querySelector('.cal-day-num').textContent = day;
+
+      cell.addEventListener('click', () => {
+        if (entry && entry.total > 0) {
+          const pct = Math.round((entry.completed / entry.total) * 100);
+          calDetail.textContent = `${day} ${label.split(' ')[0]}: ${entry.completed}/${entry.total} hábitos completados (${pct}%)`;
+        } else if (entry) {
+          calDetail.textContent = `${day} ${label.split(' ')[0]}: sin hábitos registrados ese día.`;
+        } else {
+          calDetail.textContent = `${day} ${label.split(' ')[0]}: sin registro.`;
+        }
+      });
+
+      calGrid.appendChild(cell);
+    }
   }
 
-  function toggleGoal(id) {
-    const g = goals.find(x => x.id === id);
-    if (!g) return;
-    g.done = !g.done;
-    save(STORE.goals, goals);
-    renderGoals();
-  }
+  calPrev.addEventListener('click', () => {
+    calDate.setMonth(calDate.getMonth() - 1);
+    renderCalendar();
+  });
 
-  function removeGoal(id) {
-    goals = goals.filter(g => g.id !== id);
-    save(STORE.goals, goals);
-    renderGoals();
-  }
-
-  goalForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const name = goalInput.value.trim();
-    if (!name) return;
-    goals.push({ id: uid(), name, done: false });
-    save(STORE.goals, goals);
-    goalInput.value = '';
-    renderGoals();
+  calNext.addEventListener('click', () => {
+    calDate.setMonth(calDate.getMonth() + 1);
+    renderCalendar();
   });
 
   /* ============ Master render ============ */
   function render() {
     if (currentTab === 'habits') renderHabits();
+    if (currentTab === 'todos') renderTodos();
     if (currentTab === 'routines') {
       if (activeRoutineId) renderRoutineDetail(); else renderRoutines();
     }
-    if (currentTab === 'goals') renderGoals();
+    if (currentTab === 'calendar') renderCalendar();
   }
 
   /* ============ Init ============ */
+  recordHabitHistory();
   showTab('habits');
 })();
