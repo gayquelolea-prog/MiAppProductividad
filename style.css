@@ -1,0 +1,341 @@
+/* ============ Tokens ============ */
+:root{
+  --bg: #0d0d0f;
+  --surface: #17171a;
+  --surface-2: #1f1f23;
+  --border: #2a2a2e;
+  --text: #f2f1ed;
+  --text-dim: #8a8a8f;
+  --accent: #c9a876;
+  --accent-dim: rgba(201, 168, 118, 0.14);
+  --danger: #d97b7b;
+  --radius: 14px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+*{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body{
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+button, input{ font-family: inherit; }
+
+::selection{ background: var(--accent-dim); color: var(--text); }
+
+/* ============ App shell ============ */
+.app{
+  max-width: 480px;
+  margin: 0 auto;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ============ Header ============ */
+.header{
+  padding: calc(18px + var(--safe-top)) 20px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.header-top{
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.eyebrow{
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.progress-count{
+  font-size: 12px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.page-title{
+  margin: 0 0 14px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.progress-track{
+  height: 3px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.progress-fill{
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.35s ease;
+}
+
+/* ============ Content ============ */
+.content{
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px calc(24px + var(--safe-bottom));
+  -webkit-overflow-scrolling: touch;
+}
+
+.view[hidden]{ display: none; }
+
+/* ============ Lists (shared) ============ */
+.list{
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.list-item{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 14px;
+}
+
+.item-text{
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.item-remove{
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.item-remove:active{ background: var(--surface-2); }
+
+/* --- Habit checkbox --- */
+.check{
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.check svg{
+  width: 13px;
+  height: 13px;
+  fill: var(--bg);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.list-item.is-done{
+  border-color: var(--accent-dim);
+}
+.list-item.is-done .check{
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.list-item.is-done .check svg{ opacity: 1; }
+.list-item.is-done .item-text{
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--border);
+}
+
+/* --- Goal "completed" pill --- */
+.goal-btn{
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 7px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.list-item.is-complete{
+  background: var(--accent-dim);
+  border-color: transparent;
+}
+.list-item.is-complete .item-text{
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-dim);
+}
+.list-item.is-complete .goal-btn{
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #16130c;
+}
+
+/* --- Routine row (navigates) --- */
+.routine-row{
+  cursor: pointer;
+}
+.routine-meta{
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.chevron{
+  color: var(--text-dim);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+/* ============ Empty states ============ */
+.empty-state{
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 40px 10px;
+}
+
+/* ============ Add row (forms) ============ */
+.add-row{
+  display: flex;
+  gap: 8px;
+}
+
+.add-row input{
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 14px;
+  color: var(--text);
+  font-size: 15px;
+  min-width: 0;
+}
+.add-row input::placeholder{ color: var(--text-dim); }
+.add-row input:focus{
+  outline: none;
+  border-color: var(--accent);
+}
+
+.add-btn{
+  width: 46px;
+  flex-shrink: 0;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #16130c;
+  font-size: 22px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+}
+.add-btn:active{ opacity: 0.85; }
+
+/* ============ Routine detail ============ */
+.back-btn{
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 6px 0;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.back-btn:active{ color: var(--text); }
+
+.detail-title{
+  font-size: 20px;
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+
+.danger-link{
+  display: block;
+  margin: 22px auto 0;
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 13px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+/* ============ Tab bar ============ */
+.tabbar{
+  flex-shrink: 0;
+  display: flex;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  padding-bottom: var(--safe-bottom);
+}
+
+.tab-btn{
+  flex: 1;
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0 8px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.tab-icon{
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+.tab-btn span{
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.tab-btn.is-active{ color: var(--accent); }
+
+/* ============ Focus visibility ============ */
+button:focus-visible, input:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ============ Reduced motion ============ */
+@media (prefers-reduced-motion: reduce){
+  .progress-fill{ transition: none; }
+}
