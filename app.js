@@ -3,30 +3,126 @@
 
   /* ============ Storage helpers ============ */
   const STORE = {
-    habits: 'enfoque.habits',            // [{id, name}]
-    habitLog: 'enfoque.habitLog',        // { "2026-07-12": [habitId, ...] }
-    habitHistory: 'enfoque.habitHistory',// { "2026-07-12": {completed, total} }
-    routines: 'enfoque.routines',        // [{id, name, exercises:[{id,name}]}]
-    todos: 'enfoque.todos'               // [{id,title,description,dueDate,done,archived}]
+    habits: 'enfoque.habits',             // [{id, name}]
+    habitLog: 'enfoque.habitLog',         // { "2026-07-12": [habitId, ...] }
+    habitHistory: 'enfoque.habitHistory', // { "2026-07-12": {completed, total} }
+    routines: 'enfoque.routines',         // [{id, name, exercises:[{id,name}]}]
+    todos: 'enfoque.todos'                // [{id,title,description,dueDate,done,archived}]
   };
 
-  function load(key, fallback) {
+  /**
+   * Confirms localStorage is actually writable (private-browsing modes on
+   * some older browsers, or a full disk/quota, can make it unusable). We
+   * probe once at startup so the rest of the app can decide whether to warn.
+   */
+  function isStorageAvailable() {
+    try {
+      const testKey = '__enfoque_test__';
+      localStorage.setItem(testKey, '1');
+      localStorage.removeItem(testKey);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  const storageAvailable = isStorageAvailable();
+  if (!storageAvailable) {
+    console.warn('LocalStorage no está disponible: los datos no se guardarán entre sesiones.');
+  }
+
+  /**
+   * Persists a value to localStorage as clean JSON.
+   * Returns true on success, false if the write failed (e.g. quota exceeded
+   * or storage disabled) so callers can react if they need to.
+   */
+  function saveToLocalStorage(key, value) {
+    if (!storageAvailable) return false;
+    try {
+      const json = JSON.stringify(value);
+      localStorage.setItem(key, json);
+      return true;
+    } catch (e) {
+      if (e && e.name === 'QuotaExceededError') {
+        console.warn(`No hay espacio suficiente en LocalStorage para guardar "${key}".`, e);
+      } else {
+        console.warn(`No se pudo guardar "${key}" en LocalStorage.`, e);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Reads a value back from localStorage. If the key is missing, the stored
+   * JSON is corrupted, or its shape doesn't match what's expected, the
+   * provided fallback is returned instead so a bad entry can never crash
+   * the app or silently wipe the rest of the data.
+   */
+  function loadFromLocalStorage(key, fallback, validate) {
+    if (!storageAvailable) return fallback;
     try {
       const raw = localStorage.getItem(key);
       if (raw === null) return fallback;
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (typeof validate === 'function') return validate(parsed, fallback);
+      return parsed;
     } catch (e) {
-      console.warn('No se pudo leer', key, e);
+      console.warn(`No se pudo leer "${key}" de LocalStorage, se usará el valor por defecto.`, e);
       return fallback;
     }
   }
 
-  function save(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (e) {
-      console.warn('No se pudo guardar', key, e);
+  /* ---- Shape validators: keep corrupted/edited-by-hand JSON from breaking the UI ---- */
+  function validateHabits(parsed, fallback) {
+    if (!Array.isArray(parsed)) return fallback;
+    return parsed.filter(h => h && typeof h.id === 'string' && typeof h.name === 'string');
+  }
+
+  function validateHabitLog(parsed, fallback) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback;
+    const clean = {};
+    for (const [date, ids] of Object.entries(parsed)) {
+      if (Array.isArray(ids)) clean[date] = ids.filter(id => typeof id === 'string');
     }
+    return clean;
+  }
+
+  function validateHabitHistory(parsed, fallback) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback;
+    const clean = {};
+    for (const [date, entry] of Object.entries(parsed)) {
+      if (entry && typeof entry.completed === 'number' && typeof entry.total === 'number') {
+        clean[date] = { completed: entry.completed, total: entry.total };
+      }
+    }
+    return clean;
+  }
+
+  function validateRoutines(parsed, fallback) {
+    if (!Array.isArray(parsed)) return fallback;
+    return parsed
+      .filter(r => r && typeof r.id === 'string' && typeof r.name === 'string')
+      .map(r => ({
+        id: r.id,
+        name: r.name,
+        exercises: Array.isArray(r.exercises)
+          ? r.exercises.filter(ex => ex && typeof ex.id === 'string' && typeof ex.name === 'string')
+          : []
+      }));
+  }
+
+  function validateTodos(parsed, fallback) {
+    if (!Array.isArray(parsed)) return fallback;
+    return parsed
+      .filter(t => t && typeof t.id === 'string' && typeof t.title === 'string')
+      .map(t => ({
+        id: t.id,
+        title: t.title,
+        description: typeof t.description === 'string' ? t.description : '',
+        dueDate: typeof t.dueDate === 'string' ? t.dueDate : null,
+        done: !!t.done,
+        archived: !!t.archived
+      }));
   }
 
   function uid() {
@@ -44,11 +140,11 @@
   const CHECK_ICON = '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
 
   /* ============ State ============ */
-  let habits = load(STORE.habits, []);
-  let habitLog = load(STORE.habitLog, {});
-  let habitHistory = load(STORE.habitHistory, {});
-  let routines = load(STORE.routines, []);
-  let todos = load(STORE.todos, []);
+  let habits = loadFromLocalStorage(STORE.habits, [], validateHabits);
+  let habitLog = loadFromLocalStorage(STORE.habitLog, {}, validateHabitLog);
+  let habitHistory = loadFromLocalStorage(STORE.habitHistory, {}, validateHabitHistory);
+  let routines = loadFromLocalStorage(STORE.routines, [], validateRoutines);
+  let todos = loadFromLocalStorage(STORE.todos, [], validateTodos);
 
   let activeRoutineId = null;
   let currentTab = 'habits';
@@ -97,6 +193,18 @@
   const calMonthLabel = $('cal-month-label');
   const calGrid = $('cal-grid');
   const calDetail = $('cal-detail');
+  const streakCount = $('streak-count');
+
+  const startWorkoutBtn = $('start-workout-btn');
+  const workoutOverlay = $('workout-overlay');
+  const workoutTimerEl = $('workout-timer');
+  const workoutProgressEl = $('workout-progress');
+  const workoutExerciseName = $('workout-exercise-name');
+  const workoutPrevBtn = $('workout-prev');
+  const workoutNextBtn = $('workout-next');
+  const workoutPauseBtn = $('workout-pause');
+  const workoutResetBtn = $('workout-reset');
+  const workoutFinishBtn = $('workout-finish');
 
   const tabbar = $('tabbar');
 
@@ -111,8 +219,12 @@
   function showTab(tab) {
     currentTab = tab;
 
-    document.querySelectorAll('[data-view]').forEach(v => v.hidden = true);
-    $(`view-${tab}`).hidden = false;
+    document.querySelectorAll('[data-view]').forEach(v => { v.hidden = true; v.classList.remove('fade-in'); });
+    const activeView = $(`view-${tab}`);
+    activeView.hidden = false;
+    // restart the animation reliably
+    void activeView.offsetWidth;
+    activeView.classList.add('fade-in');
 
     document.querySelectorAll('.tab-btn').forEach(b => {
       b.classList.toggle('is-active', b.dataset.tab === tab);
@@ -145,7 +257,7 @@
   function recordHabitHistory() {
     const log = habitLog[todayKey()] || [];
     habitHistory[todayKey()] = { completed: log.length, total: habits.length };
-    save(STORE.habitHistory, habitHistory);
+    saveToLocalStorage(STORE.habitHistory, habitHistory);
   }
 
   function renderHabits() {
@@ -177,6 +289,7 @@
     const total = habits.length;
     progressCount.textContent = `${doneCount}/${total}`;
     progressFill.style.width = total ? `${(doneCount / total) * 100}%` : '0%';
+    progressCount.classList.toggle('is-full', total > 0 && doneCount === total);
   }
 
   function toggleHabit(id) {
@@ -185,14 +298,14 @@
     const idx = log.indexOf(id);
     if (idx === -1) log.push(id); else log.splice(idx, 1);
     habitLog[key] = log;
-    save(STORE.habitLog, habitLog);
+    saveToLocalStorage(STORE.habitLog, habitLog);
     recordHabitHistory();
     renderHabits();
   }
 
   function removeHabit(id) {
     habits = habits.filter(h => h.id !== id);
-    save(STORE.habits, habits);
+    saveToLocalStorage(STORE.habits, habits);
     recordHabitHistory();
     renderHabits();
   }
@@ -202,7 +315,7 @@
     const name = habitInput.value.trim();
     if (!name) return;
     habits.push({ id: uid(), name });
-    save(STORE.habits, habits);
+    saveToLocalStorage(STORE.habits, habits);
     habitInput.value = '';
     recordHabitHistory();
     renderHabits();
@@ -275,7 +388,7 @@
     const t = todos.find(x => x.id === id);
     if (!t) return;
     t.done = !t.done;
-    save(STORE.todos, todos);
+    saveToLocalStorage(STORE.todos, todos);
     renderTodos();
   }
 
@@ -283,13 +396,13 @@
     const t = todos.find(x => x.id === id);
     if (!t) return;
     t.archived = true;
-    save(STORE.todos, todos);
+    saveToLocalStorage(STORE.todos, todos);
     renderTodos();
   }
 
   function removeTodo(id) {
     todos = todos.filter(t => t.id !== id);
-    save(STORE.todos, todos);
+    saveToLocalStorage(STORE.todos, todos);
     renderTodos();
   }
 
@@ -305,7 +418,7 @@
       done: false,
       archived: false
     });
-    save(STORE.todos, todos);
+    saveToLocalStorage(STORE.todos, todos);
     todoTitle.value = '';
     todoDesc.value = '';
     todoDue.value = '';
@@ -346,6 +459,7 @@
     if (!r) { backToRoutines(); return; }
 
     routineDetailTitle.textContent = r.name;
+    startWorkoutBtn.hidden = r.exercises.length === 0;
     exercisesList.innerHTML = '';
     exercisesEmpty.hidden = r.exercises.length > 0;
 
@@ -376,7 +490,7 @@
     const name = routineInput.value.trim();
     if (!name) return;
     routines.push({ id: uid(), name, exercises: [] });
-    save(STORE.routines, routines);
+    saveToLocalStorage(STORE.routines, routines);
     routineInput.value = '';
     renderRoutines();
   });
@@ -388,7 +502,7 @@
     const r = routines.find(x => x.id === activeRoutineId);
     if (!r) return;
     r.exercises.push({ id: uid(), name });
-    save(STORE.routines, routines);
+    saveToLocalStorage(STORE.routines, routines);
     exerciseInput.value = '';
     renderRoutineDetail();
   });
@@ -397,18 +511,122 @@
     const r = routines.find(x => x.id === activeRoutineId);
     if (!r) return;
     r.exercises = r.exercises.filter(e => e.id !== exId);
-    save(STORE.routines, routines);
+    saveToLocalStorage(STORE.routines, routines);
     renderRoutineDetail();
   }
 
   routineDeleteBtn.addEventListener('click', () => {
     routines = routines.filter(r => r.id !== activeRoutineId);
-    save(STORE.routines, routines);
+    saveToLocalStorage(STORE.routines, routines);
     backToRoutines();
   });
 
+  /* ============ Workout mode ============ */
+  let workoutExercises = [];
+  let workoutIndex = 0;
+  let workoutSeconds = 0;
+  let workoutInterval = null;
+  let workoutRunning = false;
+
+  function formatTimer(totalSeconds) {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${pad(m)}:${pad(s)}`;
+  }
+
+  function renderWorkoutExercise() {
+    const total = workoutExercises.length;
+    workoutProgressEl.textContent = `${workoutIndex + 1}/${total}`;
+    workoutExerciseName.textContent = workoutExercises[workoutIndex].name;
+    workoutPrevBtn.disabled = workoutIndex === 0;
+    workoutNextBtn.disabled = workoutIndex === total - 1;
+  }
+
+  function startTimerInterval() {
+    clearInterval(workoutInterval);
+    workoutInterval = setInterval(() => {
+      workoutSeconds++;
+      workoutTimerEl.textContent = formatTimer(workoutSeconds);
+    }, 1000);
+  }
+
+  function openWorkout() {
+    const r = routines.find(x => x.id === activeRoutineId);
+    if (!r || r.exercises.length === 0) return;
+
+    workoutExercises = r.exercises;
+    workoutIndex = 0;
+    workoutSeconds = 0;
+    workoutRunning = true;
+
+    workoutTimerEl.textContent = formatTimer(0);
+    workoutPauseBtn.textContent = '⏸';
+    renderWorkoutExercise();
+
+    workoutOverlay.hidden = false;
+    startTimerInterval();
+  }
+
+  function closeWorkout() {
+    clearInterval(workoutInterval);
+    workoutInterval = null;
+    workoutOverlay.hidden = true;
+  }
+
+  startWorkoutBtn.addEventListener('click', openWorkout);
+  workoutFinishBtn.addEventListener('click', closeWorkout);
+
+  workoutPrevBtn.addEventListener('click', () => {
+    if (workoutIndex > 0) { workoutIndex--; renderWorkoutExercise(); }
+  });
+
+  workoutNextBtn.addEventListener('click', () => {
+    if (workoutIndex < workoutExercises.length - 1) { workoutIndex++; renderWorkoutExercise(); }
+  });
+
+  workoutPauseBtn.addEventListener('click', () => {
+    workoutRunning = !workoutRunning;
+    workoutPauseBtn.textContent = workoutRunning ? '⏸' : '▶';
+    if (workoutRunning) startTimerInterval();
+    else { clearInterval(workoutInterval); workoutInterval = null; }
+  });
+
+  workoutResetBtn.addEventListener('click', () => {
+    workoutSeconds = 0;
+    workoutTimerEl.textContent = formatTimer(0);
+  });
+
   /* ============ Calendar ============ */
+  function computeStreak() {
+    let streak = 0;
+    const cursor = new Date();
+
+    const isFullDay = (key) => {
+      const entry = habitHistory[key];
+      return !!(entry && entry.total > 0 && entry.completed >= entry.total);
+    };
+
+    // If today isn't fully completed yet (day still in progress), start
+    // counting from yesterday so an unfinished today doesn't break the streak.
+    if (!isFullDay(dateKey(cursor))) {
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
+    while (isFullDay(dateKey(cursor))) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
+    return streak;
+  }
+
+  function renderStreak() {
+    streakCount.textContent = computeStreak();
+  }
+
   function renderCalendar() {
+    renderStreak();
+
     const year = calDate.getFullYear();
     const month = calDate.getMonth();
 
@@ -483,6 +701,36 @@
     }
     if (currentTab === 'calendar') renderCalendar();
   }
+
+  /* ============ Cross-tab sync ============ */
+  // If the user has this app open in two tabs (or as an installed PWA plus
+  // a browser tab), keep them in sync instead of one silently overwriting
+  // the other's changes on next save.
+  window.addEventListener('storage', (e) => {
+    if (!e.key) return;
+    switch (e.key) {
+      case STORE.habits:
+        habits = loadFromLocalStorage(STORE.habits, [], validateHabits);
+        if (currentTab === 'habits') renderHabits();
+        break;
+      case STORE.habitLog:
+        habitLog = loadFromLocalStorage(STORE.habitLog, {}, validateHabitLog);
+        if (currentTab === 'habits') renderHabits();
+        break;
+      case STORE.habitHistory:
+        habitHistory = loadFromLocalStorage(STORE.habitHistory, {}, validateHabitHistory);
+        if (currentTab === 'calendar') renderCalendar();
+        break;
+      case STORE.routines:
+        routines = loadFromLocalStorage(STORE.routines, [], validateRoutines);
+        if (currentTab === 'routines') render();
+        break;
+      case STORE.todos:
+        todos = loadFromLocalStorage(STORE.todos, [], validateTodos);
+        if (currentTab === 'todos') renderTodos();
+        break;
+    }
+  });
 
   /* ============ Init ============ */
   recordHabitHistory();

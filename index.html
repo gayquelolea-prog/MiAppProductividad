@@ -77,6 +77,11 @@
         <div id="routine-detail" hidden>
           <button class="back-btn" id="routine-back">← Rutinas</button>
           <h2 class="detail-title" id="routine-detail-title"></h2>
+
+          <button class="start-workout-btn" id="start-workout-btn" hidden>
+            <span>▶</span> Iniciar Entrenamiento
+          </button>
+
           <ul class="list" id="exercises-list"></ul>
 
           <p class="empty-state" id="exercises-empty" hidden>
@@ -94,6 +99,14 @@
 
       <!-- TAB: CALENDARIO -->
       <section class="view" id="view-calendar" data-view hidden>
+        <div class="streak-card">
+          <span class="streak-icon">🔥</span>
+          <div class="streak-text">
+            <span class="streak-count" id="streak-count">0</span>
+            <span class="streak-label">días seguidos</span>
+          </div>
+        </div>
+
         <div class="cal-header">
           <button class="cal-nav" id="cal-prev" aria-label="Mes anterior">‹</button>
           <span class="cal-month-label" id="cal-month-label"></span>
@@ -136,6 +149,27 @@
         <span>Progreso</span>
       </button>
     </nav>
+
+    <!-- WORKOUT MODE OVERLAY -->
+    <div class="workout-overlay" id="workout-overlay" hidden>
+      <div class="workout-top">
+        <button class="workout-icon-btn" id="workout-reset" aria-label="Reiniciar cronómetro">⟲</button>
+        <div class="workout-timer" id="workout-timer">00:00</div>
+        <button class="workout-icon-btn" id="workout-pause" aria-label="Pausar cronómetro">⏸</button>
+      </div>
+
+      <div class="workout-body">
+        <span class="workout-progress" id="workout-progress">1/1</span>
+        <h2 class="workout-exercise" id="workout-exercise-name">Ejercicio</h2>
+      </div>
+
+      <div class="workout-nav">
+        <button class="workout-nav-btn" id="workout-prev">‹ Anterior</button>
+        <button class="workout-nav-btn" id="workout-next">Siguiente ›</button>
+      </div>
+
+      <button class="workout-finish" id="workout-finish">Terminar Entrenamiento</button>
+    </div>
 
   </div>
 
