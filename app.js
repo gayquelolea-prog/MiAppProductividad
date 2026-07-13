@@ -3,18 +3,13 @@
 
   /* ============ Storage helpers ============ */
   const STORE = {
-    habits: 'enfoque.habits',             // [{id, name}]
-    habitLog: 'enfoque.habitLog',         // { "2026-07-12": [habitId, ...] }
+    habits: 'enfoque.habits',             // [{id, name, type:'check'|'counter', target}]
+    habitLog: 'enfoque.habitLog',         // { "2026-07-12": { habitId: number } }
     habitHistory: 'enfoque.habitHistory', // { "2026-07-12": {completed, total} }
-    routines: 'enfoque.routines',         // [{id, name, exercises:[{id,name}]}]
-    todos: 'enfoque.todos'                // [{id,title,description,dueDate,done,archived}]
+    routines: 'enfoque.routines',         // [{id, name, exercises:[{id,name,pr}]}]
+    todos: 'enfoque.todos'                // [{id,title,description,dueDate,done,archived,priority}]
   };
 
-  /**
-   * Confirms localStorage is actually writable (private-browsing modes on
-   * some older browsers, or a full disk/quota, can make it unusable). We
-   * probe once at startup so the rest of the app can decide whether to warn.
-   */
   function isStorageAvailable() {
     try {
       const testKey = '__enfoque_test__';
@@ -31,16 +26,10 @@
     console.warn('LocalStorage no está disponible: los datos no se guardarán entre sesiones.');
   }
 
-  /**
-   * Persists a value to localStorage as clean JSON.
-   * Returns true on success, false if the write failed (e.g. quota exceeded
-   * or storage disabled) so callers can react if they need to.
-   */
   function saveToLocalStorage(key, value) {
     if (!storageAvailable) return false;
     try {
-      const json = JSON.stringify(value);
-      localStorage.setItem(key, json);
+      localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (e) {
       if (e && e.name === 'QuotaExceededError') {
@@ -52,12 +41,6 @@
     }
   }
 
-  /**
-   * Reads a value back from localStorage. If the key is missing, the stored
-   * JSON is corrupted, or its shape doesn't match what's expected, the
-   * provided fallback is returned instead so a bad entry can never crash
-   * the app or silently wipe the rest of the data.
-   */
   function loadFromLocalStorage(key, fallback, validate) {
     if (!storageAvailable) return fallback;
     try {
@@ -72,17 +55,36 @@
     }
   }
 
-  /* ---- Shape validators: keep corrupted/edited-by-hand JSON from breaking the UI ---- */
+  /* ---- Shape validators: corrupted/hand-edited JSON never breaks the UI ---- */
   function validateHabits(parsed, fallback) {
     if (!Array.isArray(parsed)) return fallback;
-    return parsed.filter(h => h && typeof h.id === 'string' && typeof h.name === 'string');
+    return parsed
+      .filter(h => h && typeof h.id === 'string' && typeof h.name === 'string')
+      .map(h => {
+        const type = h.type === 'counter' ? 'counter' : 'check';
+        const target = type === 'counter'
+          ? (Number.isFinite(h.target) && h.target > 0 ? h.target : 8)
+          : null;
+        return { id: h.id, name: h.name, type, target };
+      });
   }
 
   function validateHabitLog(parsed, fallback) {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback;
     const clean = {};
-    for (const [date, ids] of Object.entries(parsed)) {
-      if (Array.isArray(ids)) clean[date] = ids.filter(id => typeof id === 'string');
+    for (const [date, entry] of Object.entries(parsed)) {
+      if (Array.isArray(entry)) {
+        // Legacy format from earlier versions: array of completed habit ids.
+        const obj = {};
+        entry.forEach(id => { if (typeof id === 'string') obj[id] = 1; });
+        clean[date] = obj;
+      } else if (entry && typeof entry === 'object') {
+        const obj = {};
+        for (const [hid, val] of Object.entries(entry)) {
+          if (typeof val === 'number' && Number.isFinite(val)) obj[hid] = val;
+        }
+        clean[date] = obj;
+      }
     }
     return clean;
   }
@@ -106,7 +108,9 @@
         id: r.id,
         name: r.name,
         exercises: Array.isArray(r.exercises)
-          ? r.exercises.filter(ex => ex && typeof ex.id === 'string' && typeof ex.name === 'string')
+          ? r.exercises
+              .filter(ex => ex && typeof ex.id === 'string' && typeof ex.name === 'string')
+              .map(ex => ({ id: ex.id, name: ex.name, pr: typeof ex.pr === 'string' ? ex.pr : '' }))
           : []
       }));
   }
@@ -121,7 +125,8 @@
         description: typeof t.description === 'string' ? t.description : '',
         dueDate: typeof t.dueDate === 'string' ? t.dueDate : null,
         done: !!t.done,
-        archived: !!t.archived
+        archived: !!t.archived,
+        priority: t.priority === 'high' ? 'high' : 'normal'
       }));
   }
 
@@ -151,6 +156,8 @@
   let currentDayKey = todayKey();
   let calDate = new Date();
   calDate.setDate(1);
+  let selectedHabitType = 'check';
+  let selectedTodoPriority = 'normal';
 
   /* ============ DOM refs ============ */
   const $ = (id) => document.getElementById(id);
@@ -165,6 +172,8 @@
   const habitsEmpty = $('habits-empty');
   const habitForm = $('habit-form');
   const habitInput = $('habit-input');
+  const habitTypeToggle = $('habit-type-toggle');
+  const habitTargetInput = $('habit-target');
 
   const todosList = $('todos-list');
   const todosEmpty = $('todos-empty');
@@ -172,6 +181,7 @@
   const todoTitle = $('todo-title');
   const todoDesc = $('todo-desc');
   const todoDue = $('todo-due');
+  const todoPriorityToggle = $('todo-priority-toggle');
 
   const routinesIndex = $('routines-index');
   const routinesList = $('routines-list');
@@ -194,6 +204,8 @@
   const calGrid = $('cal-grid');
   const calDetail = $('cal-detail');
   const streakCount = $('streak-count');
+  const weekChartEl = $('week-chart');
+  const resetAppBtn = $('reset-app-btn');
 
   const startWorkoutBtn = $('start-workout-btn');
   const workoutOverlay = $('workout-overlay');
@@ -205,6 +217,19 @@
   const workoutPauseBtn = $('workout-pause');
   const workoutResetBtn = $('workout-reset');
   const workoutFinishBtn = $('workout-finish');
+
+  const restTimerEl = $('rest-timer');
+  const restCountEl = $('rest-count');
+  const restToggleBtn = $('rest-toggle');
+  const restMinusBtn = $('rest-minus');
+  const restPlusBtn = $('rest-plus');
+
+  const pomodoroFab = $('pomodoro-fab');
+  const pomodoroPanel = $('pomodoro-panel');
+  const pomodoroModeEl = $('pomodoro-mode');
+  const pomodoroTimeEl = $('pomodoro-time');
+  const pomodoroToggleBtn = $('pomodoro-toggle');
+  const pomodoroResetBtn = $('pomodoro-reset');
 
   const tabbar = $('tabbar');
 
@@ -222,8 +247,7 @@
     document.querySelectorAll('[data-view]').forEach(v => { v.hidden = true; v.classList.remove('fade-in'); });
     const activeView = $(`view-${tab}`);
     activeView.hidden = false;
-    // restart the animation reliably
-    void activeView.offsetWidth;
+    void activeView.offsetWidth; // restart the fade animation reliably
     activeView.classList.add('fade-in');
 
     document.querySelectorAll('.tab-btn').forEach(b => {
@@ -254,38 +278,63 @@
   });
 
   /* ============ Habits ============ */
+  function isHabitDone(habit, dayLog) {
+    const val = (dayLog && dayLog[habit.id]) || 0;
+    if (habit.type === 'counter') return val >= (habit.target || 1);
+    return val >= 1;
+  }
+
   function recordHabitHistory() {
-    const log = habitLog[todayKey()] || [];
-    habitHistory[todayKey()] = { completed: log.length, total: habits.length };
+    const dayLog = habitLog[todayKey()] || {};
+    const completed = habits.filter(h => isHabitDone(h, dayLog)).length;
+    habitHistory[todayKey()] = { completed, total: habits.length };
     saveToLocalStorage(STORE.habitHistory, habitHistory);
   }
 
   function renderHabits() {
-    const log = habitLog[todayKey()] || [];
+    const dayLog = habitLog[todayKey()] || {};
     habitsList.innerHTML = '';
-
     habitsEmpty.hidden = habits.length > 0;
 
     habits.forEach(h => {
-      const done = log.includes(h.id);
-
+      const done = isHabitDone(h, dayLog);
       const li = document.createElement('li');
-      li.className = 'list-item' + (done ? ' is-done' : '');
 
-      li.innerHTML = `
-        <button class="check" aria-label="Marcar hábito">${CHECK_ICON}</button>
-        <span class="item-text"></span>
-        <button class="item-remove" aria-label="Eliminar hábito">×</button>
-      `;
-      li.querySelector('.item-text').textContent = h.name;
-
-      li.querySelector('.check').addEventListener('click', () => toggleHabit(h.id));
-      li.querySelector('.item-remove').addEventListener('click', () => removeHabit(h.id));
+      if (h.type === 'counter') {
+        const val = dayLog[h.id] || 0;
+        li.className = 'list-item habit-counter-item' + (done ? ' is-done' : '');
+        li.innerHTML = `
+          <div class="counter-body">
+            <span class="item-text"></span>
+            <span class="counter-progress"></span>
+          </div>
+          <div class="counter-controls">
+            <button class="counter-btn" data-action="minus" aria-label="Restar">−</button>
+            <button class="counter-btn is-add" data-action="plus" aria-label="Sumar">+</button>
+          </div>
+          <button class="item-remove" aria-label="Eliminar hábito">×</button>
+        `;
+        li.querySelector('.item-text').textContent = h.name;
+        li.querySelector('.counter-progress').textContent = `${val}/${h.target}`;
+        li.querySelector('[data-action="minus"]').addEventListener('click', () => adjustCounter(h.id, -1));
+        li.querySelector('[data-action="plus"]').addEventListener('click', () => adjustCounter(h.id, 1));
+        li.querySelector('.item-remove').addEventListener('click', () => removeHabit(h.id));
+      } else {
+        li.className = 'list-item' + (done ? ' is-done' : '');
+        li.innerHTML = `
+          <button class="check" aria-label="Marcar hábito">${CHECK_ICON}</button>
+          <span class="item-text"></span>
+          <button class="item-remove" aria-label="Eliminar hábito">×</button>
+        `;
+        li.querySelector('.item-text').textContent = h.name;
+        li.querySelector('.check').addEventListener('click', () => toggleHabit(h.id));
+        li.querySelector('.item-remove').addEventListener('click', () => removeHabit(h.id));
+      }
 
       habitsList.appendChild(li);
     });
 
-    const doneCount = habits.filter(h => log.includes(h.id)).length;
+    const doneCount = habits.filter(h => isHabitDone(h, dayLog)).length;
     const total = habits.length;
     progressCount.textContent = `${doneCount}/${total}`;
     progressFill.style.width = total ? `${(doneCount / total) * 100}%` : '0%';
@@ -294,10 +343,19 @@
 
   function toggleHabit(id) {
     const key = todayKey();
-    const log = habitLog[key] ? habitLog[key].slice() : [];
-    const idx = log.indexOf(id);
-    if (idx === -1) log.push(id); else log.splice(idx, 1);
-    habitLog[key] = log;
+    const dayLog = { ...(habitLog[key] || {}) };
+    dayLog[id] = (dayLog[id] || 0) >= 1 ? 0 : 1;
+    habitLog[key] = dayLog;
+    saveToLocalStorage(STORE.habitLog, habitLog);
+    recordHabitHistory();
+    renderHabits();
+  }
+
+  function adjustCounter(id, delta) {
+    const key = todayKey();
+    const dayLog = { ...(habitLog[key] || {}) };
+    dayLog[id] = Math.max(0, (dayLog[id] || 0) + delta);
+    habitLog[key] = dayLog;
     saveToLocalStorage(STORE.habitLog, habitLog);
     recordHabitHistory();
     renderHabits();
@@ -310,13 +368,34 @@
     renderHabits();
   }
 
+  habitTypeToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.segment');
+    if (!btn) return;
+    selectedHabitType = btn.dataset.type;
+    habitTypeToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b === btn));
+    habitTargetInput.hidden = selectedHabitType !== 'counter';
+  });
+
   habitForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const name = habitInput.value.trim();
     if (!name) return;
-    habits.push({ id: uid(), name });
+
+    const habit = { id: uid(), name, type: selectedHabitType, target: null };
+    if (selectedHabitType === 'counter') {
+      const target = parseInt(habitTargetInput.value, 10);
+      habit.target = Number.isFinite(target) && target > 0 ? target : 8;
+    }
+
+    habits.push(habit);
     saveToLocalStorage(STORE.habits, habits);
+
     habitInput.value = '';
+    habitTargetInput.value = '';
+    selectedHabitType = 'check';
+    habitTargetInput.hidden = true;
+    habitTypeToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b.dataset.type === 'check'));
+
     recordHabitHistory();
     renderHabits();
   });
@@ -344,6 +423,8 @@
 
     const sorted = visible.slice().sort((a, b) => {
       if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+      const aHigh = a.priority === 'high', bHigh = b.priority === 'high';
+      if (aHigh !== bHigh) return aHigh ? -1 : 1;
       if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
       if (a.dueDate) return -1;
       if (b.dueDate) return 1;
@@ -359,7 +440,10 @@
       li.innerHTML = `
         <button class="check" aria-label="Marcar tarea">${CHECK_ICON}</button>
         <div class="todo-body">
-          <span class="item-text"></span>
+          <div class="todo-title-row">
+            ${t.priority === 'high' ? '<span class="priority-dot" aria-hidden="true"></span>' : ''}
+            <span class="item-text"></span>
+          </div>
           ${t.description ? '<p class="todo-desc"></p>' : ''}
           ${t.dueDate ? `<span class="todo-due${overdue ? ' is-overdue' : ''}"></span>` : ''}
         </div>
@@ -406,6 +490,13 @@
     renderTodos();
   }
 
+  todoPriorityToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.segment');
+    if (!btn) return;
+    selectedTodoPriority = btn.dataset.priority;
+    todoPriorityToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b === btn));
+  });
+
   todoForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const title = todoTitle.value.trim();
@@ -416,12 +507,17 @@
       description: todoDesc.value.trim(),
       dueDate: todoDue.value || null,
       done: false,
-      archived: false
+      archived: false,
+      priority: selectedTodoPriority
     });
     saveToLocalStorage(STORE.todos, todos);
+
     todoTitle.value = '';
     todoDesc.value = '';
     todoDue.value = '';
+    selectedTodoPriority = 'normal';
+    todoPriorityToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b.dataset.priority === 'normal'));
+
     renderTodos();
   });
 
@@ -465,12 +561,27 @@
 
     r.exercises.forEach(ex => {
       const li = document.createElement('li');
-      li.className = 'list-item';
+      li.className = 'list-item exercise-item';
       li.innerHTML = `
-        <span class="item-text"></span>
+        <div class="exercise-body">
+          <span class="item-text"></span>
+          <input type="text" class="pr-input" placeholder="PR: peso x reps (ej. 100kg - 8 reps)" maxlength="40">
+        </div>
         <button class="item-remove" aria-label="Eliminar ejercicio">×</button>
       `;
       li.querySelector('.item-text').textContent = ex.name;
+
+      const prInput = li.querySelector('.pr-input');
+      prInput.value = ex.pr || '';
+      const commitPr = () => {
+        const val = prInput.value.trim();
+        if (ex.pr === val) return;
+        ex.pr = val;
+        saveToLocalStorage(STORE.routines, routines);
+      };
+      prInput.addEventListener('blur', commitPr);
+      prInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') prInput.blur(); });
+
       li.querySelector('.item-remove').addEventListener('click', () => removeExercise(ex.id));
       exercisesList.appendChild(li);
     });
@@ -501,7 +612,7 @@
     if (!name) return;
     const r = routines.find(x => x.id === activeRoutineId);
     if (!r) return;
-    r.exercises.push({ id: uid(), name });
+    r.exercises.push({ id: uid(), name, pr: '' });
     saveToLocalStorage(STORE.routines, routines);
     exerciseInput.value = '';
     renderRoutineDetail();
@@ -562,6 +673,7 @@
     workoutTimerEl.textContent = formatTimer(0);
     workoutPauseBtn.textContent = '⏸';
     renderWorkoutExercise();
+    resetRestTimer();
 
     workoutOverlay.hidden = false;
     startTimerInterval();
@@ -570,6 +682,7 @@
   function closeWorkout() {
     clearInterval(workoutInterval);
     workoutInterval = null;
+    stopRest();
     workoutOverlay.hidden = true;
   }
 
@@ -581,7 +694,11 @@
   });
 
   workoutNextBtn.addEventListener('click', () => {
-    if (workoutIndex < workoutExercises.length - 1) { workoutIndex++; renderWorkoutExercise(); }
+    if (workoutIndex < workoutExercises.length - 1) {
+      workoutIndex++;
+      renderWorkoutExercise();
+      autoStartRest(); // finishing a set naturally means "start my rest"
+    }
   });
 
   workoutPauseBtn.addEventListener('click', () => {
@@ -596,7 +713,143 @@
     workoutTimerEl.textContent = formatTimer(0);
   });
 
-  /* ============ Calendar ============ */
+  /* --- Smart rest timer --- */
+  let restDuration = 90;
+  let restRemaining = 90;
+  let restInterval = null;
+  let restRunning = false;
+
+  function updateRestDisplay() {
+    restCountEl.textContent = restRemaining;
+  }
+
+  function resetRestTimer() {
+    stopRest();
+    restTimerEl.classList.remove('is-finished');
+    restRemaining = restDuration;
+    updateRestDisplay();
+  }
+
+  function startRest() {
+    clearInterval(restInterval);
+    restRunning = true;
+    restTimerEl.classList.add('is-running');
+    restTimerEl.classList.remove('is-finished');
+    restInterval = setInterval(() => {
+      restRemaining--;
+      updateRestDisplay();
+      if (restRemaining <= 0) {
+        clearInterval(restInterval);
+        restInterval = null;
+        restRunning = false;
+        restTimerEl.classList.remove('is-running');
+        restTimerEl.classList.add('is-finished');
+        setTimeout(() => {
+          restTimerEl.classList.remove('is-finished');
+          restRemaining = restDuration;
+          updateRestDisplay();
+        }, 1500);
+      }
+    }, 1000);
+  }
+
+  function stopRest() {
+    clearInterval(restInterval);
+    restInterval = null;
+    restRunning = false;
+    restTimerEl.classList.remove('is-running');
+  }
+
+  function autoStartRest() {
+    restRemaining = restDuration;
+    updateRestDisplay();
+    startRest();
+  }
+
+  restToggleBtn.addEventListener('click', () => {
+    if (restRunning) {
+      stopRest();
+    } else {
+      restRemaining = restDuration;
+      updateRestDisplay();
+      startRest();
+    }
+  });
+
+  restMinusBtn.addEventListener('click', () => {
+    restDuration = Math.max(15, restDuration - 15);
+    if (!restRunning) { restRemaining = restDuration; updateRestDisplay(); }
+  });
+
+  restPlusBtn.addEventListener('click', () => {
+    restDuration = Math.min(300, restDuration + 15);
+    if (!restRunning) { restRemaining = restDuration; updateRestDisplay(); }
+  });
+
+  /* ============ Pomodoro (global focus timer) ============ */
+  const POMODORO_FOCUS = 25 * 60;
+  const POMODORO_BREAK = 5 * 60;
+  let pomodoroMode = 'focus';
+  let pomodoroRemaining = POMODORO_FOCUS;
+  let pomodoroInterval = null;
+  let pomodoroRunning = false;
+
+  function updatePomodoroDisplay() {
+    pomodoroTimeEl.textContent = formatTimer(pomodoroRemaining);
+    pomodoroModeEl.textContent = pomodoroMode === 'focus' ? 'Enfoque' : 'Descanso';
+    pomodoroToggleBtn.textContent = pomodoroRunning ? 'Pausar' : 'Iniciar';
+    pomodoroFab.classList.toggle('is-running', pomodoroRunning);
+  }
+
+  function tickPomodoro() {
+    pomodoroRemaining--;
+    if (pomodoroRemaining <= 0) {
+      pomodoroMode = pomodoroMode === 'focus' ? 'break' : 'focus';
+      pomodoroRemaining = pomodoroMode === 'focus' ? POMODORO_FOCUS : POMODORO_BREAK;
+    }
+    updatePomodoroDisplay();
+  }
+
+  function startPomodoro() {
+    clearInterval(pomodoroInterval);
+    pomodoroRunning = true;
+    pomodoroInterval = setInterval(tickPomodoro, 1000);
+    updatePomodoroDisplay();
+  }
+
+  function pausePomodoro() {
+    clearInterval(pomodoroInterval);
+    pomodoroInterval = null;
+    pomodoroRunning = false;
+    updatePomodoroDisplay();
+  }
+
+  pomodoroFab.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pomodoroPanel.hidden = !pomodoroPanel.hidden;
+  });
+
+  pomodoroToggleBtn.addEventListener('click', () => {
+    if (pomodoroRunning) pausePomodoro(); else startPomodoro();
+  });
+
+  pomodoroResetBtn.addEventListener('click', () => {
+    pausePomodoro();
+    pomodoroMode = 'focus';
+    pomodoroRemaining = POMODORO_FOCUS;
+    updatePomodoroDisplay();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (pomodoroPanel.hidden) return;
+    if (!pomodoroPanel.contains(e.target) && e.target !== pomodoroFab) {
+      pomodoroPanel.hidden = true;
+    }
+  });
+
+  updatePomodoroDisplay();
+
+  /* ============ Calendar / Progreso ============ */
   function computeStreak() {
     let streak = 0;
     const cursor = new Date();
@@ -624,8 +877,35 @@
     streakCount.textContent = computeStreak();
   }
 
+  function renderWeekChart() {
+    weekChartEl.innerHTML = '';
+    const labels = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    const today = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      const key = dateKey(d);
+      const entry = habitHistory[key];
+      const pct = entry && entry.total > 0 ? Math.round((entry.completed / entry.total) * 100) : 0;
+      const dow = (d.getDay() + 6) % 7; // 0 = Monday
+
+      const fillClass = !entry || entry.total === 0 ? '' : (pct >= 100 ? 'is-good' : (pct > 0 ? 'is-partial' : ''));
+
+      const col = document.createElement('div');
+      col.className = 'week-bar-col' + (key === todayKey() ? ' is-today' : '');
+      col.innerHTML = `
+        <div class="week-bar-track"><div class="week-bar-fill ${fillClass}" style="height:${pct}%"></div></div>
+        <span class="week-bar-pct">${entry && entry.total > 0 ? pct + '%' : '–'}</span>
+        <span class="week-bar-label">${labels[dow]}</span>
+      `;
+      weekChartEl.appendChild(col);
+    }
+  }
+
   function renderCalendar() {
     renderStreak();
+    renderWeekChart();
 
     const year = calDate.getFullYear();
     const month = calDate.getMonth();
@@ -657,8 +937,6 @@
       let dotClass = null;
       if (entry && entry.total > 0) {
         dotClass = entry.completed >= entry.total ? 'dot-good' : (entry.completed > 0 ? 'dot-partial' : 'dot-none');
-      } else if (entry && entry.total === 0) {
-        dotClass = null;
       }
 
       cell.innerHTML = `
@@ -692,20 +970,20 @@
     renderCalendar();
   });
 
-  /* ============ Master render ============ */
-  function render() {
-    if (currentTab === 'habits') renderHabits();
-    if (currentTab === 'todos') renderTodos();
-    if (currentTab === 'routines') {
-      if (activeRoutineId) renderRoutineDetail(); else renderRoutines();
+  resetAppBtn.addEventListener('click', () => {
+    const confirmed = window.confirm(
+      '¿Seguro que quieres restablecer la aplicación?\n\nSe borrarán permanentemente todos tus hábitos, tareas, rutinas e historial. Esta acción no se puede deshacer.'
+    );
+    if (!confirmed) return;
+    try {
+      localStorage.clear();
+    } catch (e) {
+      console.warn('No se pudo limpiar LocalStorage.', e);
     }
-    if (currentTab === 'calendar') renderCalendar();
-  }
+    location.reload();
+  });
 
   /* ============ Cross-tab sync ============ */
-  // If the user has this app open in two tabs (or as an installed PWA plus
-  // a browser tab), keep them in sync instead of one silently overwriting
-  // the other's changes on next save.
   window.addEventListener('storage', (e) => {
     if (!e.key) return;
     switch (e.key) {
@@ -731,6 +1009,16 @@
         break;
     }
   });
+
+  /* ============ Master render ============ */
+  function render() {
+    if (currentTab === 'habits') renderHabits();
+    if (currentTab === 'todos') renderTodos();
+    if (currentTab === 'routines') {
+      if (activeRoutineId) renderRoutineDetail(); else renderRoutines();
+    }
+    if (currentTab === 'calendar') renderCalendar();
+  }
 
   /* ============ Init ============ */
   recordHabitHistory();
