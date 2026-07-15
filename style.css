@@ -314,6 +314,175 @@ button, input, textarea{ font-family: inherit; }
   padding: 40px 10px;
 }
 
+.empty-state-mini{
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 14px 8px;
+}
+
+/* ============ Wellness card (sleep / energy stars) ============ */
+.wellness-card{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.wellness-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wellness-label{
+  font-size: 13.5px;
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.star-picker{
+  display: flex;
+  gap: 4px;
+}
+
+.star{
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--border);
+  cursor: pointer;
+  padding: 2px;
+  transition: color 0.2s ease, transform 0.15s ease;
+}
+.star:active{ transform: scale(0.88); }
+.star.is-active{ color: var(--accent); }
+
+/* ============ Collapsible sections ============ */
+.collapsible{
+  margin-bottom: 16px;
+}
+
+.collapsible-header{
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.25s ease;
+}
+.collapsible-header:active{ background: var(--surface-2); }
+
+.collapsible-chevron{
+  color: var(--text-dim);
+  font-size: 14px;
+  transition: transform 0.3s ease;
+}
+.collapsible.is-collapsed .collapsible-chevron{ transform: rotate(-90deg); }
+.collapsible.is-collapsed .collapsible-header{
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+
+.collapsible-body-wrap{
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s ease;
+}
+.collapsible.is-collapsed .collapsible-body-wrap{ grid-template-rows: 0fr; }
+
+.collapsible-body{
+  overflow: hidden;
+  padding-top: 10px;
+}
+
+/* ============ Mini card (supplements / water & meals / weight) ============ */
+.mini-card{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.mini-card .section-label{ margin-bottom: 12px; }
+.mini-card .list{ margin-bottom: 10px; }
+.mini-card .list:last-child{ margin-bottom: 0; }
+
+.tracker-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+.tracker-row + .tracker-row{ border-top: 1px solid var(--border); }
+
+.tracker-name{
+  font-size: 14.5px;
+}
+
+.tracker-controls{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tracker-value{
+  min-width: 40px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s ease;
+}
+
+/* ============ Agenda / time-boxing ============ */
+.agenda-form-row{
+  display: flex;
+  gap: 8px;
+}
+.agenda-form-row input[type="time"]{
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13.5px;
+  color-scheme: dark;
+  min-width: 0;
+}
+.agenda-form-row input[type="time"]:focus{
+  outline: none;
+  border-color: var(--accent);
+}
+
+.agenda-item{
+  align-items: center;
+}
+.agenda-time{
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ============ Add row (forms) ============ */
 .add-row{
   display: flex;
@@ -893,6 +1062,250 @@ button, input, textarea{ font-family: inherit; }
 .streak-label{
   font-size: 13px;
   color: var(--text-dim);
+}
+
+/* ============ Weight tracker ============ */
+.weight-form{
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.weight-form input{
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: var(--text);
+  font-size: 14.5px;
+  min-width: 0;
+}
+.weight-form input::placeholder{ color: var(--text-dim); }
+.weight-form input:focus{ outline: none; border-color: var(--accent); }
+.weight-form .add-btn-wide{ width: auto; flex-shrink: 0; padding: 11px 18px; }
+
+.weight-item{
+  padding: 11px 14px;
+}
+.weight-date{
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+.weight-value{
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.weight-trend{
+  font-size: 14px;
+  font-weight: 700;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.weight-trend.is-up{ color: var(--warn); }
+.weight-trend.is-down{ color: var(--good); }
+.weight-trend.is-flat{ color: var(--text-dim); }
+
+/* ============ Reading tracker ============ */
+.reading-card{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 8px;
+}
+
+.reading-form,
+.reading-active{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reading-form input{
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: var(--text);
+  font-size: 14.5px;
+  width: 100%;
+}
+.reading-form input::placeholder{ color: var(--text-dim); }
+.reading-form input:focus{ outline: none; border-color: var(--accent); }
+
+.reading-title{
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.reading-bar-track{
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.reading-bar-fill{
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.reading-meta{
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.reading-update-row{
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.reading-update-row input{
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  min-width: 0;
+}
+.reading-update-row input:focus{ outline: none; border-color: var(--accent); }
+
+.reading-eta{
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.reading-card .danger-link{ margin: 8px auto 0; }
+
+/* ============ Big goals board ============ */
+.goal-card{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.goal-card-header{
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 14px 16px;
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+}
+
+.goal-card-title-wrap{
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.goal-card-category{
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.goal-card-title{
+  font-size: 15px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.goal-card-pct{
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.goal-card.is-complete .goal-card-pct{ color: var(--good); }
+
+.goal-card-body-wrap{
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s ease;
+}
+.goal-card.is-collapsed .goal-card-body-wrap{ grid-template-rows: 0fr; }
+
+.goal-card-body{
+  overflow: hidden;
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.goal-progress-track{
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.goal-progress-fill{
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.goal-steps-list{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.goal-step-item{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 9px 10px;
+}
+.goal-step-item .item-text{ font-size: 13.5px; }
+
+.goal-step-form{
+  display: flex;
+  gap: 8px;
+}
+.goal-step-form input{
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 13.5px;
+  min-width: 0;
+}
+.goal-step-form input:focus{ outline: none; border-color: var(--accent); }
+.goal-step-form .add-btn{ width: 38px; }
+
+.goal-delete-btn{
+  align-self: center;
+  margin-top: 2px;
 }
 
 /* ============ Start workout button ============ */

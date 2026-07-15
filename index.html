@@ -40,14 +40,67 @@
 
       <!-- TAB: HABITOS -->
       <section class="view" id="view-habits" data-view>
-        <ul class="list" id="habits-list"></ul>
 
-        <p class="empty-state" id="habits-empty" hidden>
-          Nada por ahora.<br>Agrega tu primer hábito.
-        </p>
+        <!-- Sueño y energía matutina -->
+        <div class="wellness-card">
+          <div class="wellness-row">
+            <span class="wellness-label">😴 Sueño</span>
+            <div class="star-picker" id="sleep-picker" data-field="sleep">
+              <button type="button" class="star" data-value="1">★</button>
+              <button type="button" class="star" data-value="2">★</button>
+              <button type="button" class="star" data-value="3">★</button>
+              <button type="button" class="star" data-value="4">★</button>
+              <button type="button" class="star" data-value="5">★</button>
+            </div>
+          </div>
+          <div class="wellness-row">
+            <span class="wellness-label">⚡ Energía</span>
+            <div class="star-picker" id="energy-picker" data-field="energy">
+              <button type="button" class="star" data-value="1">★</button>
+              <button type="button" class="star" data-value="2">★</button>
+              <button type="button" class="star" data-value="3">★</button>
+              <button type="button" class="star" data-value="4">★</button>
+              <button type="button" class="star" data-value="5">★</button>
+            </div>
+          </div>
+        </div>
 
+        <!-- Bloque Mañana -->
+        <div class="collapsible" id="block-morning">
+          <button type="button" class="collapsible-header" data-target="morning">
+            <span>☀️ Rutina de Mañana</span>
+            <span class="collapsible-chevron">⌄</span>
+          </button>
+          <div class="collapsible-body-wrap">
+            <div class="collapsible-body">
+              <ul class="list" id="habits-list-morning"></ul>
+              <p class="empty-state-mini" id="habits-empty-morning" hidden>Sin hábitos matutinos todavía.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloque Noche -->
+        <div class="collapsible" id="block-night">
+          <button type="button" class="collapsible-header" data-target="night">
+            <span>🌙 Rutina de Noche</span>
+            <span class="collapsible-chevron">⌄</span>
+          </button>
+          <div class="collapsible-body-wrap">
+            <div class="collapsible-body">
+              <ul class="list" id="habits-list-night"></ul>
+              <p class="empty-state-mini" id="habits-empty-night" hidden>Sin hábitos nocturnos todavía.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Crear hábito -->
         <form class="habit-form" id="habit-form">
           <input type="text" id="habit-input" placeholder="Nuevo hábito" autocomplete="off" maxlength="60">
+
+          <div class="segmented" id="habit-block-toggle">
+            <button type="button" class="segment is-active" data-block="morning">☀️ Mañana</button>
+            <button type="button" class="segment" data-block="night">🌙 Noche</button>
+          </div>
 
           <div class="segmented" id="habit-type-toggle">
             <button type="button" class="segment is-active" data-type="check">Casilla</button>
@@ -58,6 +111,60 @@
 
           <button type="submit" class="add-btn-wide">Agregar hábito</button>
         </form>
+
+        <!-- Suplementación -->
+        <div class="mini-card">
+          <h3 class="section-label">💊 Suplementos</h3>
+          <ul class="list" id="supplements-list"></ul>
+          <p class="empty-state-mini" id="supplements-empty" hidden>Agrega tu primer suplemento.</p>
+          <form class="add-row" id="supplement-form">
+            <input type="text" id="supplement-input" placeholder="Nuevo suplemento (ej. Creatina)" autocomplete="off" maxlength="40">
+            <button type="submit" class="add-btn" aria-label="Agregar suplemento">+</button>
+          </form>
+        </div>
+
+        <!-- Agua y comidas -->
+        <div class="mini-card">
+          <h3 class="section-label">Agua y Comidas</h3>
+          <div class="tracker-row">
+            <span class="tracker-name">💧 Agua</span>
+            <div class="tracker-controls">
+              <button type="button" class="counter-btn" id="water-minus" aria-label="Restar vaso de agua">−</button>
+              <span class="tracker-value" id="water-value">0/8</span>
+              <button type="button" class="counter-btn is-add" id="water-plus" aria-label="Sumar vaso de agua">+</button>
+            </div>
+          </div>
+          <div class="tracker-row">
+            <span class="tracker-name">🍽️ Comidas</span>
+            <div class="tracker-controls">
+              <button type="button" class="counter-btn" id="meals-minus" aria-label="Restar comida">−</button>
+              <span class="tracker-value" id="meals-value">0/4</span>
+              <button type="button" class="counter-btn is-add" id="meals-plus" aria-label="Sumar comida">+</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agenda / time-boxing -->
+        <div class="collapsible is-collapsed" id="block-agenda">
+          <button type="button" class="collapsible-header" data-target="agenda">
+            <span>🗓️ Agenda del día</span>
+            <span class="collapsible-chevron">⌄</span>
+          </button>
+          <div class="collapsible-body-wrap">
+            <div class="collapsible-body">
+              <ul class="list" id="agenda-list"></ul>
+              <p class="empty-state-mini" id="agenda-empty" hidden>Sin bloques programados.</p>
+              <form class="habit-form" id="agenda-form">
+                <div class="agenda-form-row">
+                  <input type="time" id="agenda-start" aria-label="Hora de inicio">
+                  <input type="time" id="agenda-end" aria-label="Hora de fin">
+                </div>
+                <input type="text" id="agenda-label" placeholder="Actividad (ej. Entrenamiento)" autocomplete="off" maxlength="40">
+                <button type="submit" class="add-btn-wide">Agregar bloque</button>
+              </form>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- TAB: TO-DO -->
@@ -123,7 +230,7 @@
         </div>
       </section>
 
-      <!-- TAB: CALENDARIO / PROGRESO -->
+      <!-- TAB: PROGRESO -->
       <section class="view" id="view-calendar" data-view hidden>
         <div class="streak-card">
           <span class="streak-icon">🔥</span>
@@ -136,6 +243,17 @@
         <h3 class="section-label">Últimos 7 días</h3>
         <div class="week-chart" id="week-chart"></div>
 
+        <h3 class="section-label">Peso Corporal</h3>
+        <div class="mini-card">
+          <form class="weight-form" id="weight-form">
+            <input type="number" id="weight-input" placeholder="Peso de hoy (kg)" step="0.1" min="1" max="500">
+            <button type="submit" class="add-btn-wide">Registrar</button>
+          </form>
+          <ul class="list weight-list" id="weight-list"></ul>
+          <p class="empty-state-mini" id="weight-empty" hidden>Sin registros de peso todavía.</p>
+        </div>
+
+        <h3 class="section-label">Calendario</h3>
         <div class="cal-header">
           <button class="cal-nav" id="cal-prev" aria-label="Mes anterior">‹</button>
           <span class="cal-month-label" id="cal-month-label"></span>
@@ -159,6 +277,28 @@
         <button class="danger-link" id="reset-app-btn">Restablecer aplicación</button>
       </section>
 
+      <!-- TAB: METAS -->
+      <section class="view" id="view-goals" data-view hidden>
+        <h3 class="section-label">Lectura Actual</h3>
+        <div class="reading-card" id="reading-card"></div>
+
+        <h3 class="section-label" style="margin-top: 24px;">Metas Grandes</h3>
+        <ul class="list goals-board" id="big-goals-list"></ul>
+        <p class="empty-state" id="big-goals-empty" hidden>
+          Sin metas todavía.<br>Crea tu primera meta grande.
+        </p>
+
+        <form class="habit-form" id="big-goal-form">
+          <input type="text" id="big-goal-title" placeholder="Nueva meta (ej. Correr 10K)" autocomplete="off" maxlength="60">
+          <div class="segmented" id="big-goal-category-toggle">
+            <button type="button" class="segment is-active" data-category="Físico">Físico</button>
+            <button type="button" class="segment" data-category="Personal">Personal</button>
+            <button type="button" class="segment" data-category="Proyectos">Proyectos</button>
+          </div>
+          <button type="submit" class="add-btn-wide">Agregar meta</button>
+        </form>
+      </section>
+
     </main>
 
     <!-- TAB BAR -->
@@ -175,9 +315,13 @@
         <svg viewBox="0 0 24 24" class="tab-icon"><path d="M20.57 14.86 22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57l1.43 1.43L2 13.43 3.43 14.86 5.57 12.71 7 14.14 5.86 15.29 7.29 16.71 8.43 15.57 15.57 22.71z"/></svg>
         <span>Rutinas</span>
       </button>
-      <button class="tab-btn" data-tab="calendar" aria-label="Calendario">
+      <button class="tab-btn" data-tab="calendar" aria-label="Progreso">
         <svg viewBox="0 0 24 24" class="tab-icon"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 8v9H5v-9zM5 6h2v1h2V6h6v1h2V6h2v2H5z"/></svg>
         <span>Progreso</span>
+      </button>
+      <button class="tab-btn" data-tab="goals" aria-label="Metas">
+        <svg viewBox="0 0 24 24" class="tab-icon"><path d="M6 2v20h2v-7h9l-2-4 2-4H8V2z"/></svg>
+        <span>Metas</span>
       </button>
     </nav>
 

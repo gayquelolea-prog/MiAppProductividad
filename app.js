@@ -3,12 +3,22 @@
 
   /* ============ Storage helpers ============ */
   const STORE = {
-    habits: 'enfoque.habits',             // [{id, name, type:'check'|'counter', target}]
+    habits: 'enfoque.habits',             // [{id, name, type:'check'|'counter', target, block:'morning'|'night'}]
     habitLog: 'enfoque.habitLog',         // { "2026-07-12": { habitId: number } }
     habitHistory: 'enfoque.habitHistory', // { "2026-07-12": {completed, total} }
     routines: 'enfoque.routines',         // [{id, name, exercises:[{id,name,pr}]}]
-    todos: 'enfoque.todos'                // [{id,title,description,dueDate,done,archived,priority}]
+    todos: 'enfoque.todos',               // [{id,title,description,dueDate,done,archived,priority}]
+    supplements: 'enfoque.supplements',   // [{id, name}]
+    supplementLog: 'enfoque.supplementLog', // { "2026-07-12": { supplementId: number } }
+    wellness: 'enfoque.wellness',         // { "2026-07-12": {water, meals, sleep, energy} }
+    agenda: 'enfoque.agenda',             // [{id, start, end, label}]
+    weight: 'enfoque.weight',             // [{id, date, value}]
+    reading: 'enfoque.reading',           // {title, totalPages, currentPage, startDate} | null
+    bigGoals: 'enfoque.bigGoals'          // [{id, title, category, steps:[{id,text,done}], expanded}]
   };
+
+  const WATER_TARGET = 8;
+  const MEAL_TARGET = 4;
 
   function isStorageAvailable() {
     try {
@@ -65,23 +75,24 @@
         const target = type === 'counter'
           ? (Number.isFinite(h.target) && h.target > 0 ? h.target : 8)
           : null;
-        return { id: h.id, name: h.name, type, target };
+        const block = h.block === 'night' ? 'night' : 'morning';
+        return { id: h.id, name: h.name, type, target, block };
       });
   }
 
-  function validateHabitLog(parsed, fallback) {
+  function validateDateKeyedNumberMap(parsed, fallback) {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback;
     const clean = {};
     for (const [date, entry] of Object.entries(parsed)) {
       if (Array.isArray(entry)) {
-        // Legacy format from earlier versions: array of completed habit ids.
+        // Legacy format from earlier versions: array of completed ids.
         const obj = {};
         entry.forEach(id => { if (typeof id === 'string') obj[id] = 1; });
         clean[date] = obj;
       } else if (entry && typeof entry === 'object') {
         const obj = {};
-        for (const [hid, val] of Object.entries(entry)) {
-          if (typeof val === 'number' && Number.isFinite(val)) obj[hid] = val;
+        for (const [id, val] of Object.entries(entry)) {
+          if (typeof val === 'number' && Number.isFinite(val)) obj[id] = val;
         }
         clean[date] = obj;
       }
@@ -130,6 +141,64 @@
       }));
   }
 
+  function validateSupplements(parsed, fallback) {
+    if (!Array.isArray(parsed)) return fallback;
+    return parsed.filter(s => s && typeof s.id === 'string' && typeof s.name === 'string');
+  }
+
+  function validateWellness(parsed, fallback) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback;
+    const clean = {};
+    for (const [date, entry] of Object.entries(parsed)) {
+      if (!entry || typeof entry !== 'object') continue;
+      clean[date] = {
+        water: Number.isFinite(entry.water) ? Math.max(0, entry.water) : 0,
+        meals: Number.isFinite(entry.meals) ? Math.max(0, entry.meals) : 0,
+        sleep: Number.isFinite(entry.sleep) && entry.sleep >= 1 && entry.sleep <= 5 ? entry.sleep : null,
+        energy: Number.isFinite(entry.energy) && entry.energy >= 1 && entry.energy <= 5 ? entry.energy : null
+      };
+    }
+    return clean;
+  }
+
+  function validateAgenda(parsed, fallback) {
+    if (!Array.isArray(parsed)) return fallback;
+    return parsed.filter(a => a && typeof a.id === 'string' && typeof a.start === 'string' && typeof a.end === 'string' && typeof a.label === 'string');
+  }
+
+  function validateWeight(parsed, fallback) {
+    if (!Array.isArray(parsed)) return fallback;
+    return parsed.filter(w => w && typeof w.id === 'string' && typeof w.date === 'string' && typeof w.value === 'number' && Number.isFinite(w.value));
+  }
+
+  function validateReading(parsed, fallback) {
+    if (!parsed || typeof parsed !== 'object') return fallback;
+    if (typeof parsed.title !== 'string' || !Number.isFinite(parsed.totalPages) || !Number.isFinite(parsed.currentPage)) return fallback;
+    return {
+      title: parsed.title,
+      totalPages: Math.max(1, Math.round(parsed.totalPages)),
+      currentPage: Math.max(0, Math.round(parsed.currentPage)),
+      startDate: typeof parsed.startDate === 'string' ? parsed.startDate : todayKey()
+    };
+  }
+
+  function validateBigGoals(parsed, fallback) {
+    if (!Array.isArray(parsed)) return fallback;
+    return parsed
+      .filter(g => g && typeof g.id === 'string' && typeof g.title === 'string')
+      .map(g => ({
+        id: g.id,
+        title: g.title,
+        category: typeof g.category === 'string' && g.category ? g.category : 'Personal',
+        expanded: !!g.expanded,
+        steps: Array.isArray(g.steps)
+          ? g.steps
+              .filter(s => s && typeof s.id === 'string' && typeof s.text === 'string')
+              .map(s => ({ id: s.id, text: s.text, done: !!s.done }))
+          : []
+      }));
+  }
+
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
@@ -146,10 +215,17 @@
 
   /* ============ State ============ */
   let habits = loadFromLocalStorage(STORE.habits, [], validateHabits);
-  let habitLog = loadFromLocalStorage(STORE.habitLog, {}, validateHabitLog);
+  let habitLog = loadFromLocalStorage(STORE.habitLog, {}, validateDateKeyedNumberMap);
   let habitHistory = loadFromLocalStorage(STORE.habitHistory, {}, validateHabitHistory);
   let routines = loadFromLocalStorage(STORE.routines, [], validateRoutines);
   let todos = loadFromLocalStorage(STORE.todos, [], validateTodos);
+  let supplements = loadFromLocalStorage(STORE.supplements, [], validateSupplements);
+  let supplementLog = loadFromLocalStorage(STORE.supplementLog, {}, validateDateKeyedNumberMap);
+  let wellness = loadFromLocalStorage(STORE.wellness, {}, validateWellness);
+  let agenda = loadFromLocalStorage(STORE.agenda, [], validateAgenda);
+  let weight = loadFromLocalStorage(STORE.weight, [], validateWeight);
+  let reading = loadFromLocalStorage(STORE.reading, null, validateReading);
+  let bigGoals = loadFromLocalStorage(STORE.bigGoals, [], validateBigGoals);
 
   let activeRoutineId = null;
   let currentTab = 'habits';
@@ -157,7 +233,9 @@
   let calDate = new Date();
   calDate.setDate(1);
   let selectedHabitType = 'check';
+  let selectedHabitBlock = 'morning';
   let selectedTodoPriority = 'normal';
+  let selectedGoalCategory = 'Físico';
 
   /* ============ DOM refs ============ */
   const $ = (id) => document.getElementById(id);
@@ -168,12 +246,37 @@
   const progressFill = $('progress-fill');
   const progressTrack = $('progress-track');
 
-  const habitsList = $('habits-list');
-  const habitsEmpty = $('habits-empty');
+  const sleepPicker = $('sleep-picker');
+  const energyPicker = $('energy-picker');
+
+  const habitsListMorning = $('habits-list-morning');
+  const habitsEmptyMorning = $('habits-empty-morning');
+  const habitsListNight = $('habits-list-night');
+  const habitsEmptyNight = $('habits-empty-night');
   const habitForm = $('habit-form');
   const habitInput = $('habit-input');
+  const habitBlockToggle = $('habit-block-toggle');
   const habitTypeToggle = $('habit-type-toggle');
   const habitTargetInput = $('habit-target');
+
+  const supplementsList = $('supplements-list');
+  const supplementsEmpty = $('supplements-empty');
+  const supplementForm = $('supplement-form');
+  const supplementInput = $('supplement-input');
+
+  const waterMinusBtn = $('water-minus');
+  const waterPlusBtn = $('water-plus');
+  const waterValueEl = $('water-value');
+  const mealsMinusBtn = $('meals-minus');
+  const mealsPlusBtn = $('meals-plus');
+  const mealsValueEl = $('meals-value');
+
+  const agendaList = $('agenda-list');
+  const agendaEmpty = $('agenda-empty');
+  const agendaForm = $('agenda-form');
+  const agendaStartInput = $('agenda-start');
+  const agendaEndInput = $('agenda-end');
+  const agendaLabelInput = $('agenda-label');
 
   const todosList = $('todos-list');
   const todosEmpty = $('todos-empty');
@@ -207,6 +310,18 @@
   const weekChartEl = $('week-chart');
   const resetAppBtn = $('reset-app-btn');
 
+  const weightForm = $('weight-form');
+  const weightInput = $('weight-input');
+  const weightList = $('weight-list');
+  const weightEmpty = $('weight-empty');
+
+  const readingCard = $('reading-card');
+  const bigGoalsList = $('big-goals-list');
+  const bigGoalsEmpty = $('big-goals-empty');
+  const bigGoalForm = $('big-goal-form');
+  const bigGoalTitle = $('big-goal-title');
+  const bigGoalCategoryToggle = $('big-goal-category-toggle');
+
   const startWorkoutBtn = $('start-workout-btn');
   const workoutOverlay = $('workout-overlay');
   const workoutTimerEl = $('workout-timer');
@@ -238,7 +353,8 @@
     habits: { title: 'Hábitos', eyebrow: 'Hoy' },
     todos: { title: 'To-Do', eyebrow: 'Pendientes' },
     routines: { title: 'Rutinas', eyebrow: 'Entrenamiento' },
-    calendar: { title: 'Progreso', eyebrow: 'Historial' }
+    calendar: { title: 'Progreso', eyebrow: 'Historial' },
+    goals: { title: 'Metas', eyebrow: 'Biblioteca' }
   };
 
   function showTab(tab) {
@@ -277,7 +393,87 @@
     showTab(btn.dataset.tab);
   });
 
-  /* ============ Habits ============ */
+  /* ============ Collapsible sections (generic) ============ */
+  document.querySelectorAll('.collapsible-header').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.collapsible').classList.toggle('is-collapsed');
+    });
+  });
+
+  /* ============ Wellness: sleep & energy stars ============ */
+  function getTodayWellness() {
+    return wellness[todayKey()] || { water: 0, meals: 0, sleep: null, energy: null };
+  }
+
+  function updateTodayWellness(patch) {
+    const key = todayKey();
+    const current = wellness[key] || { water: 0, meals: 0, sleep: null, energy: null };
+    wellness[key] = { ...current, ...patch };
+    saveToLocalStorage(STORE.wellness, wellness);
+  }
+
+  function paintStars(container, value) {
+    container.querySelectorAll('.star').forEach(btn => {
+      const v = parseInt(btn.dataset.value, 10);
+      btn.classList.toggle('is-active', value != null && v <= value);
+    });
+  }
+
+  function renderWellnessStars() {
+    const w = getTodayWellness();
+    paintStars(sleepPicker, w.sleep);
+    paintStars(energyPicker, w.energy);
+  }
+
+  sleepPicker.addEventListener('click', (e) => {
+    const btn = e.target.closest('.star');
+    if (!btn) return;
+    const val = parseInt(btn.dataset.value, 10);
+    const w = getTodayWellness();
+    updateTodayWellness({ sleep: w.sleep === val ? null : val });
+    renderWellnessStars();
+  });
+
+  energyPicker.addEventListener('click', (e) => {
+    const btn = e.target.closest('.star');
+    if (!btn) return;
+    const val = parseInt(btn.dataset.value, 10);
+    const w = getTodayWellness();
+    updateTodayWellness({ energy: w.energy === val ? null : val });
+    renderWellnessStars();
+  });
+
+  /* ============ Water & meals trackers ============ */
+  function renderTrackers() {
+    const w = getTodayWellness();
+    waterValueEl.textContent = `${w.water}/${WATER_TARGET}`;
+    mealsValueEl.textContent = `${w.meals}/${MEAL_TARGET}`;
+    waterValueEl.style.color = w.water >= WATER_TARGET ? 'var(--good)' : '';
+    mealsValueEl.style.color = w.meals >= MEAL_TARGET ? 'var(--good)' : '';
+  }
+
+  waterPlusBtn.addEventListener('click', () => {
+    const w = getTodayWellness();
+    updateTodayWellness({ water: w.water + 1 });
+    renderTrackers();
+  });
+  waterMinusBtn.addEventListener('click', () => {
+    const w = getTodayWellness();
+    updateTodayWellness({ water: Math.max(0, w.water - 1) });
+    renderTrackers();
+  });
+  mealsPlusBtn.addEventListener('click', () => {
+    const w = getTodayWellness();
+    updateTodayWellness({ meals: w.meals + 1 });
+    renderTrackers();
+  });
+  mealsMinusBtn.addEventListener('click', () => {
+    const w = getTodayWellness();
+    updateTodayWellness({ meals: Math.max(0, w.meals - 1) });
+    renderTrackers();
+  });
+
+  /* ============ Habits (morning / night blocks, check or counter) ============ */
   function isHabitDone(habit, dayLog) {
     const val = (dayLog && dayLog[habit.id]) || 0;
     if (habit.type === 'counter') return val >= (habit.target || 1);
@@ -291,48 +487,56 @@
     saveToLocalStorage(STORE.habitHistory, habitHistory);
   }
 
-  function renderHabits() {
-    const dayLog = habitLog[todayKey()] || {};
-    habitsList.innerHTML = '';
-    habitsEmpty.hidden = habits.length > 0;
+  function buildHabitListItem(h, dayLog) {
+    const done = isHabitDone(h, dayLog);
+    const li = document.createElement('li');
 
-    habits.forEach(h => {
-      const done = isHabitDone(h, dayLog);
-      const li = document.createElement('li');
-
-      if (h.type === 'counter') {
-        const val = dayLog[h.id] || 0;
-        li.className = 'list-item habit-counter-item' + (done ? ' is-done' : '');
-        li.innerHTML = `
-          <div class="counter-body">
-            <span class="item-text"></span>
-            <span class="counter-progress"></span>
-          </div>
-          <div class="counter-controls">
-            <button class="counter-btn" data-action="minus" aria-label="Restar">−</button>
-            <button class="counter-btn is-add" data-action="plus" aria-label="Sumar">+</button>
-          </div>
-          <button class="item-remove" aria-label="Eliminar hábito">×</button>
-        `;
-        li.querySelector('.item-text').textContent = h.name;
-        li.querySelector('.counter-progress').textContent = `${val}/${h.target}`;
-        li.querySelector('[data-action="minus"]').addEventListener('click', () => adjustCounter(h.id, -1));
-        li.querySelector('[data-action="plus"]').addEventListener('click', () => adjustCounter(h.id, 1));
-        li.querySelector('.item-remove').addEventListener('click', () => removeHabit(h.id));
-      } else {
-        li.className = 'list-item' + (done ? ' is-done' : '');
-        li.innerHTML = `
-          <button class="check" aria-label="Marcar hábito">${CHECK_ICON}</button>
+    if (h.type === 'counter') {
+      const val = dayLog[h.id] || 0;
+      li.className = 'list-item habit-counter-item' + (done ? ' is-done' : '');
+      li.innerHTML = `
+        <div class="counter-body">
           <span class="item-text"></span>
-          <button class="item-remove" aria-label="Eliminar hábito">×</button>
-        `;
-        li.querySelector('.item-text').textContent = h.name;
-        li.querySelector('.check').addEventListener('click', () => toggleHabit(h.id));
-        li.querySelector('.item-remove').addEventListener('click', () => removeHabit(h.id));
-      }
+          <span class="counter-progress"></span>
+        </div>
+        <div class="counter-controls">
+          <button class="counter-btn" data-action="minus" aria-label="Restar">−</button>
+          <button class="counter-btn is-add" data-action="plus" aria-label="Sumar">+</button>
+        </div>
+        <button class="item-remove" aria-label="Eliminar hábito">×</button>
+      `;
+      li.querySelector('.item-text').textContent = h.name;
+      li.querySelector('.counter-progress').textContent = `${val}/${h.target}`;
+      li.querySelector('[data-action="minus"]').addEventListener('click', () => adjustCounter(h.id, -1));
+      li.querySelector('[data-action="plus"]').addEventListener('click', () => adjustCounter(h.id, 1));
+      li.querySelector('.item-remove').addEventListener('click', () => removeHabit(h.id));
+    } else {
+      li.className = 'list-item' + (done ? ' is-done' : '');
+      li.innerHTML = `
+        <button class="check" aria-label="Marcar hábito">${CHECK_ICON}</button>
+        <span class="item-text"></span>
+        <button class="item-remove" aria-label="Eliminar hábito">×</button>
+      `;
+      li.querySelector('.item-text').textContent = h.name;
+      li.querySelector('.check').addEventListener('click', () => toggleHabit(h.id));
+      li.querySelector('.item-remove').addEventListener('click', () => removeHabit(h.id));
+    }
+    return li;
+  }
 
-      habitsList.appendChild(li);
-    });
+  function renderHabitBlocks() {
+    const dayLog = habitLog[todayKey()] || {};
+
+    const morning = habits.filter(h => h.block !== 'night');
+    const night = habits.filter(h => h.block === 'night');
+
+    habitsListMorning.innerHTML = '';
+    habitsEmptyMorning.hidden = morning.length > 0;
+    morning.forEach(h => habitsListMorning.appendChild(buildHabitListItem(h, dayLog)));
+
+    habitsListNight.innerHTML = '';
+    habitsEmptyNight.hidden = night.length > 0;
+    night.forEach(h => habitsListNight.appendChild(buildHabitListItem(h, dayLog)));
 
     const doneCount = habits.filter(h => isHabitDone(h, dayLog)).length;
     const total = habits.length;
@@ -348,7 +552,7 @@
     habitLog[key] = dayLog;
     saveToLocalStorage(STORE.habitLog, habitLog);
     recordHabitHistory();
-    renderHabits();
+    renderHabitBlocks();
   }
 
   function adjustCounter(id, delta) {
@@ -358,15 +562,22 @@
     habitLog[key] = dayLog;
     saveToLocalStorage(STORE.habitLog, habitLog);
     recordHabitHistory();
-    renderHabits();
+    renderHabitBlocks();
   }
 
   function removeHabit(id) {
     habits = habits.filter(h => h.id !== id);
     saveToLocalStorage(STORE.habits, habits);
     recordHabitHistory();
-    renderHabits();
+    renderHabitBlocks();
   }
+
+  habitBlockToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.segment');
+    if (!btn) return;
+    selectedHabitBlock = btn.dataset.block;
+    habitBlockToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b === btn));
+  });
 
   habitTypeToggle.addEventListener('click', (e) => {
     const btn = e.target.closest('.segment');
@@ -381,7 +592,7 @@
     const name = habitInput.value.trim();
     if (!name) return;
 
-    const habit = { id: uid(), name, type: selectedHabitType, target: null };
+    const habit = { id: uid(), name, type: selectedHabitType, target: null, block: selectedHabitBlock };
     if (selectedHabitType === 'counter') {
       const target = parseInt(habitTargetInput.value, 10);
       habit.target = Number.isFinite(target) && target > 0 ? target : 8;
@@ -393,11 +604,13 @@
     habitInput.value = '';
     habitTargetInput.value = '';
     selectedHabitType = 'check';
+    selectedHabitBlock = 'morning';
     habitTargetInput.hidden = true;
     habitTypeToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b.dataset.type === 'check'));
+    habitBlockToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b.dataset.block === 'morning'));
 
     recordHabitHistory();
-    renderHabits();
+    renderHabitBlocks();
   });
 
   /* --- Day rollover watcher: keeps checkboxes fresh across midnight without reload --- */
@@ -405,12 +618,109 @@
     const nowKey = todayKey();
     if (nowKey !== currentDayKey) {
       currentDayKey = nowKey;
-      if (currentTab === 'habits') renderHabits();
+      if (currentTab === 'habits') renderHabitsTab();
     }
   }, 30000);
 
+  /* ============ Supplements ============ */
+  function renderSupplements() {
+    const log = supplementLog[todayKey()] || {};
+    supplementsList.innerHTML = '';
+    supplementsEmpty.hidden = supplements.length > 0;
+
+    supplements.forEach(s => {
+      const done = (log[s.id] || 0) >= 1;
+      const li = document.createElement('li');
+      li.className = 'list-item' + (done ? ' is-done' : '');
+      li.innerHTML = `
+        <button class="check" aria-label="Marcar suplemento">${CHECK_ICON}</button>
+        <span class="item-text"></span>
+        <button class="item-remove" aria-label="Eliminar suplemento">×</button>
+      `;
+      li.querySelector('.item-text').textContent = s.name;
+      li.querySelector('.check').addEventListener('click', () => toggleSupplement(s.id));
+      li.querySelector('.item-remove').addEventListener('click', () => removeSupplement(s.id));
+      supplementsList.appendChild(li);
+    });
+  }
+
+  function toggleSupplement(id) {
+    const key = todayKey();
+    const log = { ...(supplementLog[key] || {}) };
+    log[id] = (log[id] || 0) >= 1 ? 0 : 1;
+    supplementLog[key] = log;
+    saveToLocalStorage(STORE.supplementLog, supplementLog);
+    renderSupplements();
+  }
+
+  function removeSupplement(id) {
+    supplements = supplements.filter(s => s.id !== id);
+    saveToLocalStorage(STORE.supplements, supplements);
+    renderSupplements();
+  }
+
+  supplementForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = supplementInput.value.trim();
+    if (!name) return;
+    supplements.push({ id: uid(), name });
+    saveToLocalStorage(STORE.supplements, supplements);
+    supplementInput.value = '';
+    renderSupplements();
+  });
+
+  /* ============ Agenda (time-boxing) ============ */
+  function renderAgenda() {
+    const sorted = agenda.slice().sort((a, b) => a.start.localeCompare(b.start));
+    agendaList.innerHTML = '';
+    agendaEmpty.hidden = agenda.length > 0;
+
+    sorted.forEach(block => {
+      const li = document.createElement('li');
+      li.className = 'list-item agenda-item';
+      li.innerHTML = `
+        <span class="agenda-time"></span>
+        <span class="item-text"></span>
+        <button class="item-remove" aria-label="Eliminar bloque">×</button>
+      `;
+      li.querySelector('.agenda-time').textContent = `${block.start}–${block.end}`;
+      li.querySelector('.item-text').textContent = block.label;
+      li.querySelector('.item-remove').addEventListener('click', () => removeAgendaBlock(block.id));
+      agendaList.appendChild(li);
+    });
+  }
+
+  function removeAgendaBlock(id) {
+    agenda = agenda.filter(a => a.id !== id);
+    saveToLocalStorage(STORE.agenda, agenda);
+    renderAgenda();
+  }
+
+  agendaForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const start = agendaStartInput.value;
+    const end = agendaEndInput.value;
+    const label = agendaLabelInput.value.trim();
+    if (!start || !end || !label) return;
+    agenda.push({ id: uid(), start, end, label });
+    saveToLocalStorage(STORE.agenda, agenda);
+    agendaStartInput.value = '';
+    agendaEndInput.value = '';
+    agendaLabelInput.value = '';
+    renderAgenda();
+  });
+
+  /* ============ Habits tab master renderer ============ */
+  function renderHabitsTab() {
+    renderWellnessStars();
+    renderHabitBlocks();
+    renderSupplements();
+    renderTrackers();
+    renderAgenda();
+  }
+
   /* ============ To-Do ============ */
-  function formatDue(iso) {
+  function formatShortDate(iso) {
     const [y, m, d] = iso.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
@@ -456,7 +766,7 @@
       li.querySelector('.item-text').textContent = t.title;
       if (t.description) li.querySelector('.todo-desc').textContent = t.description;
       if (t.dueDate) {
-        li.querySelector('.todo-due').textContent = (overdue ? 'Venció ' : 'Vence ') + formatDue(t.dueDate);
+        li.querySelector('.todo-due').textContent = (overdue ? 'Venció ' : 'Vence ') + formatShortDate(t.dueDate);
       }
 
       li.querySelector('.check').addEventListener('click', () => toggleTodo(t.id));
@@ -849,6 +1159,241 @@
 
   updatePomodoroDisplay();
 
+  /* ============ Weight tracker ============ */
+  function renderWeightList() {
+    const chronological = weight.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const newestFirst = chronological.slice().reverse().slice(0, 15);
+
+    weightList.innerHTML = '';
+    weightEmpty.hidden = weight.length > 0;
+
+    newestFirst.forEach(entry => {
+      const pos = chronological.findIndex(w => w.id === entry.id);
+      const prev = pos > 0 ? chronological[pos - 1] : null;
+
+      let trendClass = 'is-flat', trendSymbol = '→';
+      if (prev) {
+        if (entry.value > prev.value) { trendClass = 'is-up'; trendSymbol = '↑'; }
+        else if (entry.value < prev.value) { trendClass = 'is-down'; trendSymbol = '↓'; }
+      }
+
+      const li = document.createElement('li');
+      li.className = 'list-item weight-item';
+      li.innerHTML = `
+        <span class="weight-date"></span>
+        <span class="weight-value"></span>
+        <span class="weight-trend ${trendClass}">${prev ? trendSymbol : ''}</span>
+      `;
+      li.querySelector('.weight-date').textContent = formatShortDate(entry.date);
+      li.querySelector('.weight-value').textContent = `${entry.value} kg`;
+      weightList.appendChild(li);
+    });
+  }
+
+  weightForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const val = parseFloat(weightInput.value);
+    if (!Number.isFinite(val) || val <= 0) return;
+
+    const key = todayKey();
+    const existingIdx = weight.findIndex(w => w.date === key);
+    if (existingIdx >= 0) weight[existingIdx].value = val;
+    else weight.push({ id: uid(), date: key, value: val });
+
+    saveToLocalStorage(STORE.weight, weight);
+    weightInput.value = '';
+    renderWeightList();
+  });
+
+  /* ============ Reading tracker ============ */
+  function renderReadingCard() {
+    readingCard.innerHTML = '';
+
+    if (!reading) {
+      readingCard.innerHTML = `
+        <form class="reading-form" id="reading-form">
+          <input type="text" id="reading-title-input" placeholder="Título del libro" maxlength="60">
+          <input type="number" id="reading-total-input" placeholder="Total de páginas" min="1" max="5000">
+          <button type="submit" class="add-btn-wide">Comenzar a leer</button>
+        </form>
+      `;
+      $('reading-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const title = $('reading-title-input').value.trim();
+        const total = parseInt($('reading-total-input').value, 10);
+        if (!title || !Number.isFinite(total) || total <= 0) return;
+        reading = { title, totalPages: total, currentPage: 0, startDate: todayKey() };
+        saveToLocalStorage(STORE.reading, reading);
+        renderReadingCard();
+      });
+      return;
+    }
+
+    const pct = Math.min(100, Math.round((reading.currentPage / reading.totalPages) * 100));
+    const [sy, sm, sd] = reading.startDate.split('-').map(Number);
+    const start = new Date(sy, sm - 1, sd);
+    const daysElapsed = Math.max(1, Math.round((new Date() - start) / 86400000));
+    const pace = reading.currentPage / daysElapsed;
+    const remainingPages = Math.max(0, reading.totalPages - reading.currentPage);
+
+    let etaText = 'Registra tu avance un par de días más para estimar el ritmo.';
+    if (remainingPages === 0) {
+      etaText = '¡Libro terminado! 🎉';
+    } else if (pace > 0) {
+      const daysLeft = Math.ceil(remainingPages / pace);
+      etaText = `Unos ${daysLeft} día${daysLeft === 1 ? '' : 's'} más a tu ritmo actual.`;
+    }
+
+    readingCard.innerHTML = `
+      <div class="reading-active">
+        <span class="reading-title"></span>
+        <div class="reading-bar-track"><div class="reading-bar-fill" style="width:${pct}%"></div></div>
+        <div class="reading-meta">
+          <span>${pct}%</span>
+          <span>${reading.currentPage}/${reading.totalPages} págs.</span>
+        </div>
+        <div class="reading-update-row">
+          <input type="number" id="reading-current-input" min="0" max="${reading.totalPages}" value="${reading.currentPage}">
+          <button type="button" class="add-btn" id="reading-update-btn">✓</button>
+        </div>
+        <span class="reading-eta"></span>
+        <button class="danger-link" id="reading-reset-btn">Terminar / cambiar de libro</button>
+      </div>
+    `;
+    readingCard.querySelector('.reading-title').textContent = reading.title;
+    readingCard.querySelector('.reading-eta').textContent = etaText;
+
+    $('reading-update-btn').addEventListener('click', () => {
+      const val = parseInt($('reading-current-input').value, 10);
+      if (!Number.isFinite(val)) return;
+      reading.currentPage = Math.max(0, Math.min(reading.totalPages, val));
+      saveToLocalStorage(STORE.reading, reading);
+      renderReadingCard();
+    });
+
+    $('reading-reset-btn').addEventListener('click', () => {
+      const confirmed = window.confirm('¿Terminar este libro y comenzar uno nuevo? Se perderá el progreso actual.');
+      if (!confirmed) return;
+      reading = null;
+      saveToLocalStorage(STORE.reading, reading);
+      renderReadingCard();
+    });
+  }
+
+  /* ============ Big goals board ============ */
+  function computeGoalPct(goal) {
+    if (!goal.steps.length) return 0;
+    const done = goal.steps.filter(s => s.done).length;
+    return Math.round((done / goal.steps.length) * 100);
+  }
+
+  function renderBigGoals() {
+    bigGoalsList.innerHTML = '';
+    bigGoalsEmpty.hidden = bigGoals.length > 0;
+
+    bigGoals.forEach(goal => {
+      const pct = computeGoalPct(goal);
+      const li = document.createElement('li');
+      li.className = 'goal-card' + (goal.expanded ? '' : ' is-collapsed') + (goal.steps.length && pct >= 100 ? ' is-complete' : '');
+      li.innerHTML = `
+        <button type="button" class="goal-card-header">
+          <div class="goal-card-title-wrap">
+            <span class="goal-card-category"></span>
+            <span class="goal-card-title"></span>
+          </div>
+          <span class="goal-card-pct"></span>
+          <span class="collapsible-chevron">⌄</span>
+        </button>
+        <div class="goal-card-body-wrap">
+          <div class="goal-card-body">
+            <div class="goal-progress-track"><div class="goal-progress-fill" style="width:${pct}%"></div></div>
+            <ul class="goal-steps-list"></ul>
+            <form class="goal-step-form">
+              <input type="text" placeholder="Nuevo paso" maxlength="60">
+              <button type="submit" class="add-btn">+</button>
+            </form>
+            <button type="button" class="danger-link goal-delete-btn">Eliminar meta</button>
+          </div>
+        </div>
+      `;
+      li.querySelector('.goal-card-category').textContent = goal.category;
+      li.querySelector('.goal-card-title').textContent = goal.title;
+      li.querySelector('.goal-card-pct').textContent = goal.steps.length ? `${pct}%` : 'Sin pasos';
+
+      li.querySelector('.goal-card-header').addEventListener('click', () => {
+        goal.expanded = !goal.expanded;
+        saveToLocalStorage(STORE.bigGoals, bigGoals);
+        renderBigGoals();
+      });
+
+      const stepsList = li.querySelector('.goal-steps-list');
+      goal.steps.forEach(step => {
+        const stepLi = document.createElement('li');
+        stepLi.className = 'goal-step-item list-item' + (step.done ? ' is-done' : '');
+        stepLi.innerHTML = `
+          <button class="check" aria-label="Marcar paso">${CHECK_ICON}</button>
+          <span class="item-text"></span>
+          <button class="item-remove" aria-label="Eliminar paso">×</button>
+        `;
+        stepLi.querySelector('.item-text').textContent = step.text;
+        stepLi.querySelector('.check').addEventListener('click', (e) => {
+          e.stopPropagation();
+          step.done = !step.done;
+          saveToLocalStorage(STORE.bigGoals, bigGoals);
+          renderBigGoals();
+        });
+        stepLi.querySelector('.item-remove').addEventListener('click', (e) => {
+          e.stopPropagation();
+          goal.steps = goal.steps.filter(s => s.id !== step.id);
+          saveToLocalStorage(STORE.bigGoals, bigGoals);
+          renderBigGoals();
+        });
+        stepsList.appendChild(stepLi);
+      });
+
+      const stepForm = li.querySelector('.goal-step-form');
+      stepForm.addEventListener('click', (e) => e.stopPropagation());
+      stepForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const input = stepForm.querySelector('input');
+        const text = input.value.trim();
+        if (!text) return;
+        goal.steps.push({ id: uid(), text, done: false });
+        saveToLocalStorage(STORE.bigGoals, bigGoals);
+        renderBigGoals();
+      });
+
+      li.querySelector('.goal-delete-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const confirmed = window.confirm(`¿Eliminar la meta "${goal.title}"? Esta acción no se puede deshacer.`);
+        if (!confirmed) return;
+        bigGoals = bigGoals.filter(g => g.id !== goal.id);
+        saveToLocalStorage(STORE.bigGoals, bigGoals);
+        renderBigGoals();
+      });
+
+      bigGoalsList.appendChild(li);
+    });
+  }
+
+  bigGoalCategoryToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.segment');
+    if (!btn) return;
+    selectedGoalCategory = btn.dataset.category;
+    bigGoalCategoryToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b === btn));
+  });
+
+  bigGoalForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const title = bigGoalTitle.value.trim();
+    if (!title) return;
+    bigGoals.push({ id: uid(), title, category: selectedGoalCategory, steps: [], expanded: true });
+    saveToLocalStorage(STORE.bigGoals, bigGoals);
+    bigGoalTitle.value = '';
+    renderBigGoals();
+  });
+
   /* ============ Calendar / Progreso ============ */
   function computeStreak() {
     let streak = 0;
@@ -859,8 +1404,6 @@
       return !!(entry && entry.total > 0 && entry.completed >= entry.total);
     };
 
-    // If today isn't fully completed yet (day still in progress), start
-    // counting from yesterday so an unfinished today doesn't break the streak.
     if (!isFullDay(dateKey(cursor))) {
       cursor.setDate(cursor.getDate() - 1);
     }
@@ -888,7 +1431,7 @@
       const key = dateKey(d);
       const entry = habitHistory[key];
       const pct = entry && entry.total > 0 ? Math.round((entry.completed / entry.total) * 100) : 0;
-      const dow = (d.getDay() + 6) % 7; // 0 = Monday
+      const dow = (d.getDay() + 6) % 7;
 
       const fillClass = !entry || entry.total === 0 ? '' : (pct >= 100 ? 'is-good' : (pct > 0 ? 'is-partial' : ''));
 
@@ -906,6 +1449,7 @@
   function renderCalendar() {
     renderStreak();
     renderWeekChart();
+    renderWeightList();
 
     const year = calDate.getFullYear();
     const month = calDate.getMonth();
@@ -914,7 +1458,7 @@
     calMonthLabel.textContent = label;
 
     const firstDay = new Date(year, month, 1);
-    const leading = (firstDay.getDay() + 6) % 7; // Monday-first offset
+    const leading = (firstDay.getDay() + 6) % 7;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     calGrid.innerHTML = '';
@@ -946,14 +1490,23 @@
       cell.querySelector('.cal-day-num').textContent = day;
 
       cell.addEventListener('click', () => {
+        const wellnessEntry = wellness[key];
+        let text;
         if (entry && entry.total > 0) {
           const pct = Math.round((entry.completed / entry.total) * 100);
-          calDetail.textContent = `${day} ${label.split(' ')[0]}: ${entry.completed}/${entry.total} hábitos completados (${pct}%)`;
+          text = `${day} ${label.split(' ')[0]}: ${entry.completed}/${entry.total} hábitos (${pct}%)`;
         } else if (entry) {
-          calDetail.textContent = `${day} ${label.split(' ')[0]}: sin hábitos registrados ese día.`;
+          text = `${day} ${label.split(' ')[0]}: sin hábitos registrados.`;
         } else {
-          calDetail.textContent = `${day} ${label.split(' ')[0]}: sin registro.`;
+          text = `${day} ${label.split(' ')[0]}: sin registro.`;
         }
+        if (wellnessEntry && (wellnessEntry.sleep || wellnessEntry.energy)) {
+          const parts = [];
+          if (wellnessEntry.sleep) parts.push(`sueño ${wellnessEntry.sleep}★`);
+          if (wellnessEntry.energy) parts.push(`energía ${wellnessEntry.energy}★`);
+          text += ` · ${parts.join(', ')}`;
+        }
+        calDetail.textContent = text;
       });
 
       calGrid.appendChild(cell);
@@ -972,7 +1525,7 @@
 
   resetAppBtn.addEventListener('click', () => {
     const confirmed = window.confirm(
-      '¿Seguro que quieres restablecer la aplicación?\n\nSe borrarán permanentemente todos tus hábitos, tareas, rutinas e historial. Esta acción no se puede deshacer.'
+      '¿Seguro que quieres restablecer la aplicación?\n\nSe borrarán permanentemente todos tus hábitos, suplementos, tareas, rutinas, peso, lectura, metas e historial. Esta acción no se puede deshacer.'
     );
     if (!confirmed) return;
     try {
@@ -989,11 +1542,11 @@
     switch (e.key) {
       case STORE.habits:
         habits = loadFromLocalStorage(STORE.habits, [], validateHabits);
-        if (currentTab === 'habits') renderHabits();
+        if (currentTab === 'habits') renderHabitBlocks();
         break;
       case STORE.habitLog:
-        habitLog = loadFromLocalStorage(STORE.habitLog, {}, validateHabitLog);
-        if (currentTab === 'habits') renderHabits();
+        habitLog = loadFromLocalStorage(STORE.habitLog, {}, validateDateKeyedNumberMap);
+        if (currentTab === 'habits') renderHabitBlocks();
         break;
       case STORE.habitHistory:
         habitHistory = loadFromLocalStorage(STORE.habitHistory, {}, validateHabitHistory);
@@ -1007,17 +1560,46 @@
         todos = loadFromLocalStorage(STORE.todos, [], validateTodos);
         if (currentTab === 'todos') renderTodos();
         break;
+      case STORE.supplements:
+        supplements = loadFromLocalStorage(STORE.supplements, [], validateSupplements);
+        if (currentTab === 'habits') renderSupplements();
+        break;
+      case STORE.supplementLog:
+        supplementLog = loadFromLocalStorage(STORE.supplementLog, {}, validateDateKeyedNumberMap);
+        if (currentTab === 'habits') renderSupplements();
+        break;
+      case STORE.wellness:
+        wellness = loadFromLocalStorage(STORE.wellness, {}, validateWellness);
+        if (currentTab === 'habits') { renderWellnessStars(); renderTrackers(); }
+        break;
+      case STORE.agenda:
+        agenda = loadFromLocalStorage(STORE.agenda, [], validateAgenda);
+        if (currentTab === 'habits') renderAgenda();
+        break;
+      case STORE.weight:
+        weight = loadFromLocalStorage(STORE.weight, [], validateWeight);
+        if (currentTab === 'calendar') renderWeightList();
+        break;
+      case STORE.reading:
+        reading = loadFromLocalStorage(STORE.reading, null, validateReading);
+        if (currentTab === 'goals') renderReadingCard();
+        break;
+      case STORE.bigGoals:
+        bigGoals = loadFromLocalStorage(STORE.bigGoals, [], validateBigGoals);
+        if (currentTab === 'goals') renderBigGoals();
+        break;
     }
   });
 
   /* ============ Master render ============ */
   function render() {
-    if (currentTab === 'habits') renderHabits();
+    if (currentTab === 'habits') renderHabitsTab();
     if (currentTab === 'todos') renderTodos();
     if (currentTab === 'routines') {
       if (activeRoutineId) renderRoutineDetail(); else renderRoutines();
     }
     if (currentTab === 'calendar') renderCalendar();
+    if (currentTab === 'goals') { renderReadingCard(); renderBigGoals(); }
   }
 
   /* ============ Init ============ */
