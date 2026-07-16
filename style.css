@@ -19,8 +19,8 @@
   --radius: 20px;
   --shadow-card: 0 10px 30px rgba(20, 22, 26, 0.05);
   --shadow-pop: 0 20px 60px rgba(20, 22, 26, 0.18);
-  --hero-grad-start: #2d4a22;
-  --hero-grad-end: #1e3316;
+  --hero-grad-start: #354e29;
+  --hero-grad-end: #192714;
   --hero-text: #f5f3e9;
   --hero-text-dim: rgba(245, 243, 233, 0.68);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -57,11 +57,19 @@ button, input, textarea{ font-family: inherit; }
 .header{
   padding: calc(18px + var(--safe-top)) 20px 26px;
   flex-shrink: 0;
-  background: linear-gradient(160deg, var(--hero-grad-start), var(--hero-grad-end));
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(255, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0) 60%),
+    linear-gradient(135deg, #354e29 0%, #192714 100%);
   border-radius: 0 0 28px 28px;
   box-shadow: 0 14px 28px rgba(30, 51, 22, 0.22);
-  position: relative;
-  z-index: 1;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  transition: box-shadow 0.25s ease;
+}
+
+.header.is-scrolled{
+  box-shadow: 0 18px 32px rgba(15, 26, 10, 0.38);
 }
 
 .header-utility{

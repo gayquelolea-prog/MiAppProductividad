@@ -250,6 +250,8 @@
   /* ============ DOM refs ============ */
   const $ = (id) => document.getElementById(id);
 
+  const contentEl = $('content');
+  const appHeader = $('app-header');
   const pageTitle = $('page-title');
   const todayLabel = $('today-label');
   const progressCount = $('progress-count');
@@ -388,6 +390,9 @@
     activeView.hidden = false;
     void activeView.offsetWidth; // restart the fade animation reliably
     activeView.classList.add('fade-in');
+
+    contentEl.scrollTop = 0;
+    appHeader.classList.remove('is-scrolled');
 
     document.querySelectorAll('.tab-btn').forEach(b => {
       b.classList.toggle('is-active', b.dataset.tab === tab);
@@ -1741,6 +1746,11 @@
     if (currentTab === 'calendar') renderCalendar();
     if (currentTab === 'goals') { renderReadingCard(); renderBigGoals(); }
   }
+
+  /* ============ Sticky header scroll shadow ============ */
+  contentEl.addEventListener('scroll', () => {
+    appHeader.classList.toggle('is-scrolled', contentEl.scrollTop > 4);
+  }, { passive: true });
 
   /* ============ Init ============ */
   recordHabitHistory();
