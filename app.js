@@ -835,7 +835,6 @@
     renderHabitBlocks();
     renderSupplements();
     renderTrackers();
-    renderAgenda();
   }
 
   /* ============ To-Do ============ */
@@ -843,6 +842,11 @@
     const [y, m, d] = iso.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  }
+
+  function renderTodosTab() {
+    renderAgenda();
+    renderTodos();
   }
 
   function renderTodos() {
@@ -1706,7 +1710,7 @@
         break;
       case STORE.agenda:
         agenda = loadFromLocalStorage(STORE.agenda, [], validateAgenda);
-        if (currentTab === 'habits') renderAgenda();
+        if (currentTab === 'todos') renderAgenda();
         break;
       case STORE.weight:
         weight = loadFromLocalStorage(STORE.weight, [], validateWeight);
@@ -1730,7 +1734,7 @@
   /* ============ Master render ============ */
   function render() {
     if (currentTab === 'habits') renderHabitsTab();
-    if (currentTab === 'todos') renderTodos();
+    if (currentTab === 'todos') renderTodosTab();
     if (currentTab === 'routines') {
       if (activeRoutineId) renderRoutineDetail(); else renderRoutines();
     }
