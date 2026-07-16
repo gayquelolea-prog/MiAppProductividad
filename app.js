@@ -14,11 +14,11 @@
     agenda: 'enfoque.agenda',             // [{id, start, end, label}]
     weight: 'enfoque.weight',             // [{id, date, value}]
     reading: 'enfoque.reading',           // {title, totalPages, currentPage, startDate} | null
-    bigGoals: 'enfoque.bigGoals'          // [{id, title, category, steps:[{id,text,done}], expanded}]
+    bigGoals: 'enfoque.bigGoals',         // [{id, title, category, steps:[{id,text,done}], expanded}]
+    trackerSettings: 'enfoque.trackerSettings' // {waterUnit:'ml'|'oz', waterGoal, mealsGoal}
   };
 
-  const WATER_TARGET = 8;
-  const MEAL_TARGET = 4;
+  const DEFAULT_TRACKER_SETTINGS = { waterUnit: 'ml', waterGoal: 2000, mealsGoal: 4 };
 
   function isStorageAvailable() {
     try {
@@ -161,6 +161,14 @@
     return clean;
   }
 
+  function validateTrackerSettings(parsed, fallback) {
+    if (!parsed || typeof parsed !== 'object') return fallback;
+    const waterUnit = parsed.waterUnit === 'oz' ? 'oz' : 'ml';
+    const waterGoal = Number.isFinite(parsed.waterGoal) && parsed.waterGoal > 0 ? parsed.waterGoal : DEFAULT_TRACKER_SETTINGS.waterGoal;
+    const mealsGoal = Number.isFinite(parsed.mealsGoal) && parsed.mealsGoal > 0 ? parsed.mealsGoal : DEFAULT_TRACKER_SETTINGS.mealsGoal;
+    return { waterUnit, waterGoal, mealsGoal };
+  }
+
   function validateAgenda(parsed, fallback) {
     if (!Array.isArray(parsed)) return fallback;
     return parsed.filter(a => a && typeof a.id === 'string' && typeof a.start === 'string' && typeof a.end === 'string' && typeof a.label === 'string');
@@ -226,6 +234,7 @@
   let weight = loadFromLocalStorage(STORE.weight, [], validateWeight);
   let reading = loadFromLocalStorage(STORE.reading, null, validateReading);
   let bigGoals = loadFromLocalStorage(STORE.bigGoals, [], validateBigGoals);
+  let trackerSettings = loadFromLocalStorage(STORE.trackerSettings, { ...DEFAULT_TRACKER_SETTINGS }, validateTrackerSettings);
 
   let activeRoutineId = null;
   let currentTab = 'habits';
@@ -236,6 +245,7 @@
   let selectedHabitBlock = 'morning';
   let selectedTodoPriority = 'normal';
   let selectedGoalCategory = 'Físico';
+  let selectedWaterUnit = trackerSettings.waterUnit;
 
   /* ============ DOM refs ============ */
   const $ = (id) => document.getElementById(id);
@@ -348,6 +358,19 @@
 
   const tabbar = $('tabbar');
 
+  const confirmModal = $('confirm-modal');
+  const confirmModalMessage = $('confirm-modal-message');
+  const confirmModalCancel = $('confirm-modal-cancel');
+  const confirmModalConfirm = $('confirm-modal-confirm');
+
+  const trackerSettingsBtn = $('tracker-settings-btn');
+  const trackerSettingsModal = $('tracker-settings-modal');
+  const trackerSettingsCancel = $('tracker-settings-cancel');
+  const trackerSettingsSave = $('tracker-settings-save');
+  const waterUnitToggle = $('water-unit-toggle');
+  const waterGoalInput = $('water-goal-input');
+  const mealsGoalInput = $('meals-goal-input');
+
   /* ============ Tab switching ============ */
   const TAB_META = {
     habits: { title: 'Hábitos', eyebrow: 'Hoy' },
@@ -391,6 +414,39 @@
     const btn = e.target.closest('.tab-btn');
     if (!btn) return;
     showTab(btn.dataset.tab);
+  });
+
+  /* ============ Confirm-delete modal (generic, reused everywhere) ============ */
+  let pendingConfirmAction = null;
+
+  function openConfirmModal(message, onConfirm) {
+    confirmModalMessage.textContent = message || '¿Estás seguro de que quieres eliminar esto?';
+    pendingConfirmAction = onConfirm;
+    confirmModal.hidden = false;
+  }
+
+  function closeConfirmModal() {
+    confirmModal.hidden = true;
+    pendingConfirmAction = null;
+  }
+
+  confirmModalCancel.addEventListener('click', closeConfirmModal);
+
+  confirmModalConfirm.addEventListener('click', () => {
+    const action = pendingConfirmAction;
+    closeConfirmModal();
+    if (typeof action === 'function') action();
+  });
+
+  confirmModal.addEventListener('click', (e) => {
+    if (e.target === confirmModal) closeConfirmModal();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (!confirmModal.hidden) closeConfirmModal();
+      if (!trackerSettingsModal.hidden) closeTrackerSettingsModal();
+    }
   });
 
   /* ============ Collapsible sections (generic) ============ */
@@ -444,22 +500,27 @@
   });
 
   /* ============ Water & meals trackers ============ */
+  function waterStep() {
+    return trackerSettings.waterUnit === 'oz' ? 8 : 250;
+  }
+
   function renderTrackers() {
     const w = getTodayWellness();
-    waterValueEl.textContent = `${w.water}/${WATER_TARGET}`;
-    mealsValueEl.textContent = `${w.meals}/${MEAL_TARGET}`;
-    waterValueEl.style.color = w.water >= WATER_TARGET ? 'var(--good)' : '';
-    mealsValueEl.style.color = w.meals >= MEAL_TARGET ? 'var(--good)' : '';
+    const unitLabel = trackerSettings.waterUnit;
+    waterValueEl.textContent = `${w.water}/${trackerSettings.waterGoal} ${unitLabel}`;
+    mealsValueEl.textContent = `${w.meals}/${trackerSettings.mealsGoal}`;
+    waterValueEl.style.color = w.water >= trackerSettings.waterGoal ? 'var(--good)' : '';
+    mealsValueEl.style.color = w.meals >= trackerSettings.mealsGoal ? 'var(--good)' : '';
   }
 
   waterPlusBtn.addEventListener('click', () => {
     const w = getTodayWellness();
-    updateTodayWellness({ water: w.water + 1 });
+    updateTodayWellness({ water: w.water + waterStep() });
     renderTrackers();
   });
   waterMinusBtn.addEventListener('click', () => {
     const w = getTodayWellness();
-    updateTodayWellness({ water: Math.max(0, w.water - 1) });
+    updateTodayWellness({ water: Math.max(0, w.water - waterStep()) });
     renderTrackers();
   });
   mealsPlusBtn.addEventListener('click', () => {
@@ -471,6 +532,52 @@
     const w = getTodayWellness();
     updateTodayWellness({ meals: Math.max(0, w.meals - 1) });
     renderTrackers();
+  });
+
+  /* --- Tracker settings modal (water unit/goal, meals goal) --- */
+  function openTrackerSettingsModal() {
+    selectedWaterUnit = trackerSettings.waterUnit;
+    waterUnitToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b.dataset.unit === selectedWaterUnit));
+    waterGoalInput.value = trackerSettings.waterGoal;
+    mealsGoalInput.value = trackerSettings.mealsGoal;
+    trackerSettingsModal.hidden = false;
+  }
+
+  function closeTrackerSettingsModal() {
+    trackerSettingsModal.hidden = true;
+  }
+
+  trackerSettingsBtn.addEventListener('click', openTrackerSettingsModal);
+  trackerSettingsCancel.addEventListener('click', closeTrackerSettingsModal);
+  trackerSettingsModal.addEventListener('click', (e) => {
+    if (e.target === trackerSettingsModal) closeTrackerSettingsModal();
+  });
+
+  waterUnitToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.segment');
+    if (!btn) return;
+    selectedWaterUnit = btn.dataset.unit;
+    waterUnitToggle.querySelectorAll('.segment').forEach(b => b.classList.toggle('is-active', b === btn));
+    // Offer a sensible default goal when switching units, unless the person already typed one.
+    const currentVal = parseFloat(waterGoalInput.value);
+    const wasDefault = !Number.isFinite(currentVal) || currentVal === trackerSettings.waterGoal;
+    if (wasDefault) {
+      waterGoalInput.value = selectedWaterUnit === 'oz' ? 70 : 2000;
+    }
+  });
+
+  trackerSettingsSave.addEventListener('click', () => {
+    const waterGoal = parseFloat(waterGoalInput.value);
+    const mealsGoal = parseInt(mealsGoalInput.value, 10);
+
+    trackerSettings = {
+      waterUnit: selectedWaterUnit,
+      waterGoal: Number.isFinite(waterGoal) && waterGoal > 0 ? waterGoal : trackerSettings.waterGoal,
+      mealsGoal: Number.isFinite(mealsGoal) && mealsGoal > 0 ? mealsGoal : trackerSettings.mealsGoal
+    };
+    saveToLocalStorage(STORE.trackerSettings, trackerSettings);
+    renderTrackers();
+    closeTrackerSettingsModal();
   });
 
   /* ============ Habits (morning / night blocks, check or counter) ============ */
@@ -565,11 +672,15 @@
     renderHabitBlocks();
   }
 
-  function removeHabit(id) {
+  function deleteHabit(id) {
     habits = habits.filter(h => h.id !== id);
     saveToLocalStorage(STORE.habits, habits);
     recordHabitHistory();
     renderHabitBlocks();
+  }
+
+  function removeHabit(id) {
+    openConfirmModal('¿Estás seguro de que quieres eliminar este hábito?', () => deleteHabit(id));
   }
 
   habitBlockToggle.addEventListener('click', (e) => {
@@ -653,10 +764,14 @@
     renderSupplements();
   }
 
-  function removeSupplement(id) {
+  function deleteSupplement(id) {
     supplements = supplements.filter(s => s.id !== id);
     saveToLocalStorage(STORE.supplements, supplements);
     renderSupplements();
+  }
+
+  function removeSupplement(id) {
+    openConfirmModal('¿Estás seguro de que quieres eliminar este suplemento?', () => deleteSupplement(id));
   }
 
   supplementForm.addEventListener('submit', (e) => {
@@ -690,10 +805,14 @@
     });
   }
 
-  function removeAgendaBlock(id) {
+  function deleteAgendaBlock(id) {
     agenda = agenda.filter(a => a.id !== id);
     saveToLocalStorage(STORE.agenda, agenda);
     renderAgenda();
+  }
+
+  function removeAgendaBlock(id) {
+    openConfirmModal('¿Estás seguro de que quieres eliminar este bloque de la agenda?', () => deleteAgendaBlock(id));
   }
 
   agendaForm.addEventListener('submit', (e) => {
@@ -794,10 +913,14 @@
     renderTodos();
   }
 
-  function removeTodo(id) {
+  function deleteTodo(id) {
     todos = todos.filter(t => t.id !== id);
     saveToLocalStorage(STORE.todos, todos);
     renderTodos();
+  }
+
+  function removeTodo(id) {
+    openConfirmModal('¿Estás seguro de que quieres eliminar esta tarea?', () => deleteTodo(id));
   }
 
   todoPriorityToggle.addEventListener('click', (e) => {
@@ -928,7 +1051,7 @@
     renderRoutineDetail();
   });
 
-  function removeExercise(exId) {
+  function deleteExercise(exId) {
     const r = routines.find(x => x.id === activeRoutineId);
     if (!r) return;
     r.exercises = r.exercises.filter(e => e.id !== exId);
@@ -936,10 +1059,16 @@
     renderRoutineDetail();
   }
 
+  function removeExercise(exId) {
+    openConfirmModal('¿Estás seguro de que quieres eliminar este ejercicio?', () => deleteExercise(exId));
+  }
+
   routineDeleteBtn.addEventListener('click', () => {
-    routines = routines.filter(r => r.id !== activeRoutineId);
-    saveToLocalStorage(STORE.routines, routines);
-    backToRoutines();
+    openConfirmModal('¿Estás seguro de que quieres eliminar esta rutina y todos sus ejercicios?', () => {
+      routines = routines.filter(r => r.id !== activeRoutineId);
+      saveToLocalStorage(STORE.routines, routines);
+      backToRoutines();
+    });
   });
 
   /* ============ Workout mode ============ */
@@ -1272,11 +1401,11 @@
     });
 
     $('reading-reset-btn').addEventListener('click', () => {
-      const confirmed = window.confirm('¿Terminar este libro y comenzar uno nuevo? Se perderá el progreso actual.');
-      if (!confirmed) return;
-      reading = null;
-      saveToLocalStorage(STORE.reading, reading);
-      renderReadingCard();
+      openConfirmModal('¿Terminar este libro y comenzar uno nuevo? Se perderá el progreso actual.', () => {
+        reading = null;
+        saveToLocalStorage(STORE.reading, reading);
+        renderReadingCard();
+      });
     });
   }
 
@@ -1344,9 +1473,11 @@
         });
         stepLi.querySelector('.item-remove').addEventListener('click', (e) => {
           e.stopPropagation();
-          goal.steps = goal.steps.filter(s => s.id !== step.id);
-          saveToLocalStorage(STORE.bigGoals, bigGoals);
-          renderBigGoals();
+          openConfirmModal('¿Estás seguro de que quieres eliminar este paso?', () => {
+            goal.steps = goal.steps.filter(s => s.id !== step.id);
+            saveToLocalStorage(STORE.bigGoals, bigGoals);
+            renderBigGoals();
+          });
         });
         stepsList.appendChild(stepLi);
       });
@@ -1366,11 +1497,11 @@
 
       li.querySelector('.goal-delete-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        const confirmed = window.confirm(`¿Eliminar la meta "${goal.title}"? Esta acción no se puede deshacer.`);
-        if (!confirmed) return;
-        bigGoals = bigGoals.filter(g => g.id !== goal.id);
-        saveToLocalStorage(STORE.bigGoals, bigGoals);
-        renderBigGoals();
+        openConfirmModal(`¿Eliminar la meta "${goal.title}"? Esta acción no se puede deshacer.`, () => {
+          bigGoals = bigGoals.filter(g => g.id !== goal.id);
+          saveToLocalStorage(STORE.bigGoals, bigGoals);
+          renderBigGoals();
+        });
       });
 
       bigGoalsList.appendChild(li);
@@ -1524,16 +1655,17 @@
   });
 
   resetAppBtn.addEventListener('click', () => {
-    const confirmed = window.confirm(
-      '¿Seguro que quieres restablecer la aplicación?\n\nSe borrarán permanentemente todos tus hábitos, suplementos, tareas, rutinas, peso, lectura, metas e historial. Esta acción no se puede deshacer.'
+    openConfirmModal(
+      'Se borrarán permanentemente todos tus hábitos, suplementos, tareas, rutinas, peso, lectura, metas e historial. Esta acción no se puede deshacer.',
+      () => {
+        try {
+          localStorage.clear();
+        } catch (e) {
+          console.warn('No se pudo limpiar LocalStorage.', e);
+        }
+        location.reload();
+      }
     );
-    if (!confirmed) return;
-    try {
-      localStorage.clear();
-    } catch (e) {
-      console.warn('No se pudo limpiar LocalStorage.', e);
-    }
-    location.reload();
   });
 
   /* ============ Cross-tab sync ============ */
@@ -1587,6 +1719,10 @@
       case STORE.bigGoals:
         bigGoals = loadFromLocalStorage(STORE.bigGoals, [], validateBigGoals);
         if (currentTab === 'goals') renderBigGoals();
+        break;
+      case STORE.trackerSettings:
+        trackerSettings = loadFromLocalStorage(STORE.trackerSettings, { ...DEFAULT_TRACKER_SETTINGS }, validateTrackerSettings);
+        if (currentTab === 'habits') renderTrackers();
         break;
     }
   });

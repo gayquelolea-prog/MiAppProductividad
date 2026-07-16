@@ -125,13 +125,16 @@
 
         <!-- Agua y comidas -->
         <div class="mini-card">
-          <h3 class="section-label">Agua y Comidas</h3>
+          <div class="mini-card-header">
+            <h3 class="section-label">Agua y Comidas</h3>
+            <button type="button" class="icon-btn" id="tracker-settings-btn" aria-label="Configurar metas de agua y comidas">⚙️</button>
+          </div>
           <div class="tracker-row">
             <span class="tracker-name">💧 Agua</span>
             <div class="tracker-controls">
-              <button type="button" class="counter-btn" id="water-minus" aria-label="Restar vaso de agua">−</button>
-              <span class="tracker-value" id="water-value">0/8</span>
-              <button type="button" class="counter-btn is-add" id="water-plus" aria-label="Sumar vaso de agua">+</button>
+              <button type="button" class="counter-btn" id="water-minus" aria-label="Restar agua">−</button>
+              <span class="tracker-value" id="water-value">0/2000 ml</span>
+              <button type="button" class="counter-btn is-add" id="water-plus" aria-label="Sumar agua">+</button>
             </div>
           </div>
           <div class="tracker-row">
@@ -353,6 +356,50 @@
       </div>
 
       <button class="workout-finish" id="workout-finish">Terminar Entrenamiento</button>
+    </div>
+
+    <!-- CONFIRM DELETE MODAL -->
+    <div class="modal-overlay" id="confirm-modal" hidden>
+      <div class="modal-card">
+        <div class="modal-icon">🗑️</div>
+        <h3 class="modal-title">Eliminar elemento</h3>
+        <p class="modal-message" id="confirm-modal-message">¿Estás seguro de que quieres eliminar esto?</p>
+        <div class="modal-actions">
+          <button type="button" class="modal-btn modal-btn-cancel" id="confirm-modal-cancel">Cancelar</button>
+          <button type="button" class="modal-btn modal-btn-confirm is-danger" id="confirm-modal-confirm">Eliminar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WATER & MEALS SETTINGS MODAL -->
+    <div class="modal-overlay" id="tracker-settings-modal" hidden>
+      <div class="modal-card">
+        <h3 class="modal-title">Configurar metas</h3>
+        <p class="modal-message">Ajusta tus objetivos diarios de agua y comidas.</p>
+
+        <div class="modal-field">
+          <label>Unidad de agua</label>
+          <div class="segmented" id="water-unit-toggle">
+            <button type="button" class="segment is-active" data-unit="ml">ml</button>
+            <button type="button" class="segment" data-unit="oz">oz</button>
+          </div>
+        </div>
+
+        <div class="modal-field">
+          <label for="water-goal-input">Meta diaria de agua</label>
+          <input type="number" id="water-goal-input" min="1" max="10000" step="1">
+        </div>
+
+        <div class="modal-field">
+          <label for="meals-goal-input">Meta diaria de comidas</label>
+          <input type="number" id="meals-goal-input" min="1" max="20" step="1">
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="modal-btn modal-btn-cancel" id="tracker-settings-cancel">Cancelar</button>
+          <button type="button" class="modal-btn modal-btn-confirm" id="tracker-settings-save">Guardar</button>
+        </div>
+      </div>
     </div>
 
   </div>
