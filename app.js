@@ -250,6 +250,7 @@
   /* ============ DOM refs ============ */
   const $ = (id) => document.getElementById(id);
 
+  const appShell = $('app-shell');
   const contentEl = $('content');
   const appHeader = $('app-header');
   const pageTitle = $('page-title');
@@ -393,6 +394,7 @@
 
     contentEl.scrollTop = 0;
     appHeader.classList.remove('is-scrolled');
+    syncHeaderHeight();
 
     document.querySelectorAll('.tab-btn').forEach(b => {
       b.classList.toggle('is-active', b.dataset.tab === tab);
@@ -1746,6 +1748,26 @@
     if (currentTab === 'calendar') renderCalendar();
     if (currentTab === 'goals') { renderReadingCard(); renderBigGoals(); }
   }
+
+  /* ============ Keep header height in sync (fixes Safari dvh/flex quirks) ============ */
+  // The header is pinned with position:absolute so it can never scroll away,
+  // even in Safari when the dynamic address bar changes the real viewport
+  // height. #content is pushed down by --header-h to match; we measure the
+  // header's real rendered height (safe-area included) instead of guessing.
+  function syncHeaderHeight() {
+    const h = appHeader.getBoundingClientRect().height;
+    if (h > 0) appShell.style.setProperty('--header-h', `${h}px`);
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncHeaderHeight).observe(appHeader);
+  } else {
+    window.addEventListener('resize', syncHeaderHeight);
+  }
+  window.addEventListener('orientationchange', syncHeaderHeight);
+  syncHeaderHeight();
+  // Re-measure once more after fonts/layout settle on first paint.
+  setTimeout(syncHeaderHeight, 150);
 
   /* ============ Sticky header scroll shadow ============ */
   contentEl.addEventListener('scroll', () => {
